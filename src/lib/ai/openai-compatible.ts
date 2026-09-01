@@ -1,5 +1,11 @@
 import type { ToolCall } from '../types';
-import { ProviderError, type AIProvider, type CompletionRequest, type CompletionResponse } from './types';
+import {
+  ProviderError,
+  type AIProvider,
+  type CompletionRequest,
+  type CompletionResponse,
+  type ProviderErrorKind,
+} from './types';
 
 /**
  * Cliente para qualquer endpoint no formato OpenAI (`POST /chat/completions`):
@@ -52,9 +58,18 @@ interface StreamAccumulator {
   toolCalls: Map<number, { id: string; name: string; args: string }>;
   finishReason: string;
   usage: { inputTokens: number; outputTokens: number };
+  /** Erro em banda: HTTP 200 com o problema dentro do proprio stream. */
+  error?: { message: string; code?: number | string };
 }
 
 interface StreamChunk {
+  /**
+   * Agregadores como o OpenRouter respondem HTTP 200 e reportam a falha DENTRO
+   * do stream: um frame com `error` no topo e `choices` vazio. Ignorar esse
+   * frame faz a resposta terminar vazia e parecer sucesso — o pior modo de
+   * falha possivel, porque nao aparece erro nenhum para o usuario.
+   */
+  error?: { message?: string; code?: number | string };
   choices?: {
     delta?: {
       content?: string | null;
@@ -71,6 +86,12 @@ interface StreamChunk {
 
 /** Aplica um chunk SSE ao acumulador. Exportado para teste. */
 export function applyChunk(acc: StreamAccumulator, chunk: StreamChunk, onText?: (t: string) => void): void {
+  if (chunk.error) {
+    acc.error = {
+      message: chunk.error.message ?? 'o provedor reportou um erro sem mensagem',
+      code: chunk.error.code,
+    };
+  }
   const choice = chunk.choices?.[0];
   if (choice?.delta?.content) {
     acc.text += choice.delta.content;
@@ -90,6 +111,15 @@ export function applyChunk(acc: StreamAccumulator, chunk: StreamChunk, onText?: 
       outputTokens: chunk.usage.completion_tokens ?? 0,
     };
   }
+}
+
+/** Mapeia o codigo do erro em banda para a classificacao do modulo de erros. */
+export function kindForStreamErrorCode(code: number | string | undefined): ProviderErrorKind {
+  const numeric = typeof code === 'number' ? code : Number(code);
+  if (!Number.isFinite(numeric)) return 'http';
+  if (numeric === 401 || numeric === 403) return 'auth';
+  if (numeric === 429 || (numeric >= 500 && numeric < 600)) return 'rate-limit';
+  return 'http';
 }
 
 export function finalizeToolCalls(acc: StreamAccumulator): ToolCall[] {
@@ -196,6 +226,7 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
 
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
       let buffer = '';
+      let interrupted = false;
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -218,21 +249,39 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
         }
       } catch (error) {
         // O Chrome rejeita a leitura com `TypeError: network error` quando a
-        // conexao cai no meio do stream. Cru, isso nao diz nada ao usuario e
-        // ainda passava por defeito da extensao na classificacao.
+        // conexao cai no meio do stream — algo que acontece de verdade com
+        // agregadores em geracoes longas.
         if (request.signal?.aborted) throw error;
+
+        // Um tool call pela metade NUNCA pode ser aproveitado: o JSON truncado
+        // viraria, por exemplo, um write_file com o arquivo cortado. Sem texto
+        // util ou com tool call em andamento, a queda e erro mesmo.
+        if (acc.text === '' || acc.toolCalls.size > 0) {
+          throw new ProviderError(
+            `A conexao com ${options.label} caiu durante a resposta ` +
+              `(${acc.text.length} caractere(s) recebidos). Tente enviar de novo.`,
+            'network',
+            error,
+          );
+        }
+
+        // Com texto e sem tool call pendente, devolver o parcial e melhor do
+        // que jogar fora o que ja chegou. O laco do agente encerra o turno.
+        interrupted = true;
+      }
+
+      if (acc.error) {
         throw new ProviderError(
-          `A conexao com ${options.label} caiu durante a resposta ` +
-            `(${acc.text.length} caractere(s) recebidos). Tente enviar de novo.`,
-          'network',
-          error,
+          `${options.label} interrompeu a geracao: ${acc.error.message}` +
+            (acc.error.code === undefined ? '' : ` (codigo ${acc.error.code})`),
+          kindForStreamErrorCode(acc.error.code),
         );
       }
 
       return {
         text: acc.text,
         toolCalls: finalizeToolCalls(acc),
-        stopReason: acc.finishReason,
+        stopReason: interrupted ? 'interrupted' : acc.finishReason,
         usage: acc.usage,
       };
     },

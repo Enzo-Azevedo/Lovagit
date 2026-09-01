@@ -168,6 +168,18 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       toolCalls: response.toolCalls.length > 0 ? response.toolCalls : undefined,
     });
 
+    // Resposta truncada por queda de conexao: o texto que chegou fica no chat,
+    // mas o turno encerra aqui. Seguir adiante seria agir sobre uma resposta
+    // que o modelo nao terminou de dar.
+    if (response.stopReason === 'interrupted') {
+      onEvent({
+        type: 'error',
+        error:
+          'A conexao caiu no meio da resposta. O que chegou esta acima; envie de novo para continuar.',
+      });
+      break;
+    }
+
     if (response.toolCalls.length === 0) break;
 
     const results = [];
