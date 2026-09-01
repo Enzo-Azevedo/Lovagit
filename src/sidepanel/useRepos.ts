@@ -9,6 +9,7 @@ import {
   saveRepoRef,
   saveSettings,
 } from '../lib/storage';
+import { pruneRepoFromServers } from '../lib/mcp/registry';
 import { captureError } from '../lib/telemetry/reporter';
 import type { RepoId, RepoRef, Settings } from '../lib/types';
 import { hasSecret, SecretNames } from '../lib/vault';
@@ -133,6 +134,7 @@ export function useRepos() {
   const disconnect = useCallback(
     async (repoId: RepoId) => {
       await disconnectRepo(repoId);
+      await pruneRepoFromServers(repoId);
       await refresh();
     },
     [refresh],

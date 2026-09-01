@@ -17,6 +17,7 @@ export const SecretNames = {
   githubPat: 'github_pat',
   providerApiKey: (providerId: string) => `provider:${providerId}:api_key`,
   providerOAuth: (providerId: string) => `provider:${providerId}:oauth`,
+  mcpOAuth: (serverId: string) => `mcp:${serverId}:oauth`,
 } as const;
 
 function openDb(): Promise<IDBDatabase> {

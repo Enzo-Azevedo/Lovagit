@@ -114,13 +114,22 @@ O provedor Claude usa o SDK oficial `@anthropic-ai/sdk` com
 `anthropic-dangerous-direct-browser-access` exigido pela API para requisições
 vindas do navegador. Modelo padrão: `claude-opus-5`.
 
-**b) Login OAuth em provedor terceiro** — OAuth 2.0 com **PKCE** via
-`chrome.identity.launchWebAuthFlow`. A extensão é um *public client*: não existe
-`client_secret` embutido (num bundle de navegador, segredo nenhum é segredo).
-Preencha `authorization_url`, `token_url`, `client_id` e escopos, e registre no
-provedor a Redirect URI mostrada na tela — `https://<extension-id>.chromiumapp.org/`.
-O access token é guardado cifrado e renovado por `refresh_token` quando o provedor
-oferece um.
+Ao salvar, a chave é **validada na hora** contra a API do provedor: a extensão
+lista os modelos que a sua conta enxerga e os sugere no campo de modelo. Descobrir
+que a chave está errada na primeira mensagem do chat é o pior momento possível.
+
+**b) Login OAuth em provedor que ofereça OAuth para a própria API** — OAuth 2.0
+com **PKCE** via `chrome.identity.launchWebAuthFlow`, sem `client_secret` embutido
+(num bundle de navegador, segredo nenhum é segredo).
+
+> **Anthropic e OpenAI não entram aqui.** A Anthropic restringe o OAuth ao Claude
+> Code e ao claude.ai e [não registra `client_id` para terceiros](https://claude.com/docs/connectors/building/authentication);
+> desde fevereiro de 2026 os termos [proíbem explicitamente](https://www.theregister.com/software/2026/02/20/anthropic-clarifies-ban-on-third-party-tool-access-to-claude/5014546)
+> usar token OAuth de plano de consumo em ferramenta de terceiro, e o bloqueio é
+> aplicado. O "Sign in with ChatGPT" da OpenAI é identidade, não acesso à API na
+> conta do usuário. Para essas duas, chave de API é o caminho suportado — e é por
+> isso que o login de um clique existe no Lovagit para **servidores MCP**, não
+> para o modelo.
 
 > A permissão de host da origem do endpoint é solicitada no momento em que você
 > salva a chave/faz login (`optional_host_permissions`), então a extensão só
@@ -193,6 +202,60 @@ de erros**, que também mostra o histórico local dos últimos 50 relatórios.
 
 ---
 
+## Servidores MCP (ferramentas extras)
+
+Um servidor MCP dá **ferramentas** ao agente — consultar um banco, ler o estado de
+um projeto, abrir um chamado. Ele não substitui o provedor de IA: o modelo continua
+vindo da chave configurada acima.
+
+### Login de um clique, sem configuração
+
+Aqui o padrão MCP entrega o que a API da Anthropic não permite:
+
+1. a extensão tenta conectar e leva `401`;
+2. lê a dica do `WWW-Authenticate` e descobre os metadados do recurso protegido
+   ([RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728)) e do authorization
+   server ([RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414));
+3. **se registra sozinha** ([RFC 7591, Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591))
+   — nada de `client_id` digitado à mão;
+4. abre a página de consentimento do provedor com PKCE e `resource` ([RFC 8707](https://datatracker.ietf.org/doc/html/rfc8707));
+5. guarda o token cifrado e renova por `refresh_token`.
+
+Você cola a URL do servidor, clica em **Adicionar e conectar**, autoriza na página
+do provedor e pronto.
+
+### Isolamento: habilitado por repositório
+
+O servidor é cadastrado uma vez e **habilitado por repositório**. O chat de X só
+enxerga as ferramentas marcadas para X.
+
+Isso não é preciosismo: um servidor MCP com memória guardaria contexto de um
+repositório e o entregaria no chat de outro — um canal lateral que o firewall de
+contexto não consegue vigiar, porque o vazamento aconteceria fora do nosso
+processo. Por isso um servidor nasce sem repositório algum habilitado, e
+desconectar um repositório o remove de todos os servidores.
+
+A checagem é dupla: a lista já chega filtrada por repositório, e o executor
+confere de novo antes de chamar. Se a segunda checagem falhar, o erro **escala
+como defeito de alta prioridade** em vez de virar um erro de ferramenta — é
+exatamente o tipo de falha que precisa aparecer.
+
+### Detalhes de implementação
+
+- Transporte **Streamable HTTP**: `initialize` → `notifications/initialized` →
+  `tools/list` → `tools/call`, com `Mcp-Session-Id` ecoado e `MCP-Protocol-Version`
+  negociada (o servidor pode responder com versão diferente da pedida — é normal).
+- A resposta pode vir como JSON puro **ou** SSE; o cliente entende as duas.
+  Um cliente que só entende JSON quebra em metade dos servidores.
+- `404` numa requisição com sessão significa sessão expirada: limpa e reconecta.
+- As ferramentas entram no prompt como `mcp__<servidor>__<tool>`, sem colidir com
+  as nativas.
+- **CORS não é obstáculo**: páginas de extensão ignoram CORS para hosts em
+  `host_permissions` — diferente de content scripts. Servidor que não libera nossa
+  origem funciona do mesmo jeito.
+
+---
+
 ## Uso
 
 1. **Repos** → conecte um ou mais repositórios (o mapeamento roda na hora).
@@ -229,7 +292,14 @@ src/
    │  ├─ anthropic.ts         Claude via SDK oficial
    │  ├─ openai-compatible.ts endpoints estilo OpenAI (streaming SSE)
    │  ├─ oauth.ts             OAuth 2.0 + PKCE
+   │  ├─ validate.ts          valida a chave e lista os modelos da conta
    │  └─ registry.ts          fábrica de provedores
+   ├─ mcp/
+   │  ├─ protocol.ts          JSON-RPC, SSE, namespace de ferramentas
+   │  ├─ client.ts            transporte Streamable HTTP
+   │  ├─ auth.ts              descoberta, registro dinâmico, PKCE
+   │  ├─ registry.ts          cadastro e escopo por repositório
+   │  └─ types.ts
    ├─ telemetry/
    │  ├─ classify.ts          bug vs. configuração vs. transitório
    │  ├─ redact.ts            redação antes de publicar
@@ -250,7 +320,7 @@ src/
 |---|---|
 | `npm run build` | typecheck + build de produção em `dist/` |
 | `npm run dev` | build em watch (recarregue a extensão no Chrome) |
-| `npm test` | suíte Vitest (isolamento, mapeamento, escrita, diff, streaming, relato de erros) |
+| `npm test` | suíte Vitest (isolamento, mapeamento, escrita, diff, streaming, relato de erros, MCP) |
 | `npm run typecheck` | só o `tsc --noEmit` |
 
 ## Limites conhecidos

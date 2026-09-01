@@ -3,6 +3,7 @@ import { createProvider } from '../lib/ai/registry';
 import { runAgent, type AgentEvent } from '../lib/agent/loop';
 import { createScope } from '../lib/agent/isolation';
 import { applyChangesToMap } from '../lib/github/mapper';
+import { getServersForRepo } from '../lib/mcp/registry';
 import { captureError } from '../lib/telemetry/reporter';
 import { applyChanges, restoreCheckpoint } from '../lib/github/writer';
 import {
@@ -135,6 +136,8 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
       const provider = await createProvider(activeProvider);
       const scope = createScope(repo);
       history = await getChat(repo.id);
+      // So os servidores MCP habilitados para ESTE repositorio.
+      const mcpServers = await getServersForRepo(repo.id);
 
       const onEvent = (event: AgentEvent) => {
         switch (event.type) {
@@ -186,6 +189,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         provider,
         autoApply: settings.autoApplyChanges,
         connectedRepoIds: settings.connectedRepoIds,
+        mcpServers,
         signal: controller.signal,
         onEvent,
       });

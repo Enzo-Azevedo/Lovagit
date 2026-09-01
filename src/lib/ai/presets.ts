@@ -59,8 +59,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     modelHint: 'Identificador do modelo aceito pelo seu endpoint',
   },
   {
+    // Anthropic e OpenAI nao oferecem OAuth para acesso a API por terceiros:
+    // a Anthropic restringe o fluxo ao Claude Code e ao claude.ai, e o
+    // "Sign in with ChatGPT" e identidade, nao acesso a API. Este preset serve
+    // para provedores que de fato expoem OAuth para a propria API.
     key: 'oauth',
-    label: 'Login OAuth em provedor terceiro',
+    label: 'Login OAuth (provedor que ofereca OAuth para a API)',
     kind: 'oauth',
     baseUrl: '',
     model: '',
