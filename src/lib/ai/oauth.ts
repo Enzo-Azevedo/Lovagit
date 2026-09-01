@@ -1,3 +1,4 @@
+import { challengeFor, randomState, randomVerifier } from '../pkce';
 import type { OAuthProviderConfig } from '../types';
 import { getSecret, SecretNames, setSecret, deleteSecret } from '../vault';
 import { ProviderError } from './types';
@@ -22,22 +23,6 @@ export interface StoredTokens {
 
 export function getRedirectUri(): string {
   return chrome.identity.getRedirectURL();
-}
-
-function randomVerifier(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(64));
-  return base64Url(bytes);
-}
-
-function base64Url(bytes: Uint8Array): string {
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-async function challengeFor(verifier: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-  return base64Url(new Uint8Array(digest));
 }
 
 async function exchange(
@@ -90,7 +75,7 @@ async function exchange(
 export async function loginWithOAuth(config: OAuthProviderConfig): Promise<StoredTokens> {
   const verifier = randomVerifier();
   const challenge = await challengeFor(verifier);
-  const state = base64Url(crypto.getRandomValues(new Uint8Array(16)));
+  const state = randomState();
   const redirectUri = getRedirectUri();
 
   const authUrl = new URL(config.authorizationUrl);

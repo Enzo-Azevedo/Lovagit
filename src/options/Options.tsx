@@ -3,10 +3,12 @@ import { getAuthenticatedUser } from '../lib/github/client';
 import { getSettings, saveSettings } from '../lib/storage';
 import { deleteSecret, getSecret, hasSecret, SecretNames, setSecret } from '../lib/vault';
 import { PROVIDER_PRESETS, providerFromPreset } from '../lib/ai/presets';
+import { validateProviderKey, type ValidationResult } from '../lib/ai/validate';
 import { providerOrigin } from '../lib/ai/registry';
 import { getRedirectUri, getStoredTokens, loginWithOAuth, logoutOAuth } from '../lib/ai/oauth';
 import { installErrorHandlers } from '../lib/telemetry/reporter';
 import type { ProviderConfig, Settings } from '../lib/types';
+import { McpSection } from './McpSection';
 import { TelemetrySection } from './TelemetrySection';
 
 function Field({
@@ -39,6 +41,8 @@ export function Options() {
   // os dois no mesmo mapa faria o placeholder da chave salva ser gravado como chave.
   const [hasProviderKey, setHasProviderKey] = useState<Record<string, boolean>>({});
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+  const [validations, setValidations] = useState<Record<string, ValidationResult>>({});
+  const [validatingId, setValidatingId] = useState<string | null>(null);
   const [oauthStatus, setOauthStatus] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
 
@@ -149,11 +153,30 @@ export function Options() {
       }
       await setSecret(SecretNames.providerApiKey(provider.id), key.trim());
       setKeyDrafts((prev) => ({ ...prev, [provider.id]: '' }));
-      setMessage(`Chave de ${provider.label} salva.`);
+      setValidatingId(provider.id);
+      // Valida na hora: descobrir que a chave esta errada so na primeira
+      // mensagem do chat e o pior momento possivel.
+      const result = await validateProviderKey(provider, key.trim());
+      setValidations((prev) => ({ ...prev, [provider.id]: result }));
+      setValidatingId(null);
+      setMessage(`${provider.label}: ${result.message}`);
       await reload();
     },
     [reload],
   );
+
+  const revalidate = useCallback(async (provider: ProviderConfig) => {
+    const stored = await getSecret(SecretNames.providerApiKey(provider.id));
+    if (!stored) {
+      setMessage('Nenhuma chave salva para validar.');
+      return;
+    }
+    setValidatingId(provider.id);
+    const result = await validateProviderKey(provider, stored);
+    setValidations((prev) => ({ ...prev, [provider.id]: result }));
+    setValidatingId(null);
+    setMessage(`${provider.label}: ${result.message}`);
+  }, []);
 
   const doOAuthLogin = useCallback(
     async (provider: ProviderConfig) => {
@@ -281,18 +304,34 @@ export function Options() {
               </Field>
               <Field
                 label="Modelo"
-                hint={PROVIDER_PRESETS.find((preset) => preset.kind === provider.kind)?.modelHint}
+                hint={
+                  validations[provider.id]?.models.length
+                    ? `${validations[provider.id].models.length} modelo(s) da sua conta sugeridos no campo`
+                    : PROVIDER_PRESETS.find((preset) => preset.kind === provider.kind)?.modelHint
+                }
               >
                 <input
                   className={inputClass}
+                  list={`models-${provider.id}`}
                   value={provider.model}
                   onChange={(event) => void updateProvider(provider.id, { model: event.target.value })}
                 />
+                <datalist id={`models-${provider.id}`}>
+                  {(validations[provider.id]?.models ?? []).map((model) => (
+                    <option key={model} value={model} />
+                  ))}
+                </datalist>
               </Field>
             </div>
 
             {provider.kind === 'oauth' ? (
               <div className="space-y-3">
+                <p className="rounded-md border border-ink-700 bg-ink-900 px-2 py-1.5 text-[11px] text-ink-400">
+                  Anthropic e OpenAI nao oferecem OAuth para acesso a API por terceiros — a
+                  Anthropic restringe o fluxo ao Claude Code e ao claude.ai, e o login da OpenAI e
+                  identidade, nao acesso a API. Para essas duas, use chave de API acima. Este bloco
+                  serve para provedores que expoem OAuth para a propria API.
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Authorization URL">
                     <input
@@ -354,7 +393,39 @@ export function Options() {
                 </div>
               </div>
             ) : (
-              <Field label="Chave de API" hint="Cifrada no cofre local. Nunca sai do navegador exceto para o proprio provedor.">
+              <Field
+                label="Chave de API"
+                hint="Cifrada no cofre local. Nunca sai do navegador exceto para o proprio provedor."
+              >
+                <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                  {(() => {
+                    const docsUrl = PROVIDER_PRESETS.find(
+                      (preset) => preset.kind === provider.kind && preset.docsUrl,
+                    )?.docsUrl;
+                    return docsUrl ? (
+                      <button
+                        className="rounded-md border border-ink-700 px-3 py-1.5 text-xs text-ink-200"
+                        onClick={() => void chrome.tabs.create({ url: docsUrl })}
+                      >
+                        Abrir painel de chaves
+                      </button>
+                    ) : null;
+                  })()}
+                  <button
+                    className="rounded-md border border-ink-700 px-3 py-1.5 text-xs text-ink-200 disabled:opacity-40"
+                    disabled={validatingId === provider.id}
+                    onClick={() => void revalidate(provider)}
+                  >
+                    {validatingId === provider.id ? 'Validando...' : 'Testar chave salva'}
+                  </button>
+                  {validations[provider.id] && (
+                    <span
+                      className={`text-[11px] ${validations[provider.id].ok ? 'text-lime-accent' : 'text-red-300'}`}
+                    >
+                      {validations[provider.id].message}
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <input
                     type="password"
@@ -399,6 +470,8 @@ export function Options() {
           </span>
         </label>
       </section>
+
+      <McpSection />
 
       <TelemetrySection />
     </div>

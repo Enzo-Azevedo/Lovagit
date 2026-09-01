@@ -3,7 +3,8 @@ import type { ApplyResult } from '../github/writer';
 import type { ChatMessage, PendingFileChange, RepoId, RepoMap, ToolCall } from '../types';
 import { assertNoForeignRepoLeak, assertScopedMap, type RepoScope } from './isolation';
 import { buildSystemPrompt } from './prompt';
-import { executeTool, TOOL_SCHEMAS, type ToolRuntime } from './tools';
+import type { McpServerConfig } from '../mcp/types';
+import { buildToolSchemas, executeTool, type ToolRuntime } from './tools';
 
 /** Teto de idas e voltas com o modelo em um unico turno do usuario. */
 const MAX_STEPS = 16;
@@ -31,6 +32,8 @@ export interface RunAgentOptions {
   autoApply: boolean;
   /** Todos os repositorios conectados — usado apenas pelo canario de vazamento. */
   connectedRepoIds: RepoId[];
+  /** Servidores MCP habilitados para ESTE repositorio (ja filtrados). */
+  mcpServers: McpServerConfig[];
   signal?: AbortSignal;
   onEvent: (event: AgentEvent) => void;
 }
@@ -73,7 +76,8 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
   const map = assertScopedMap(scope, options.map);
   const repoId = scope.repoId;
 
-  const system = buildSystemPrompt(scope, map, options.autoApply);
+  const system = buildSystemPrompt(scope, map, options.autoApply, options.mcpServers);
+  const tools = buildToolSchemas(options.mcpServers);
   const produced: ChatMessage[] = [];
 
   const userMessage: ChatMessage = {
@@ -106,6 +110,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
   const runtime: ToolRuntime = {
     scope,
     map,
+    mcpServers: options.mcpServers,
     ref,
     pending,
     autoApply: options.autoApply,
@@ -141,7 +146,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     const response = await provider.complete({
       system,
       turns,
-      tools: TOOL_SCHEMAS,
+      tools,
       signal: options.signal,
       onText: (delta) => onEvent({ type: 'assistant-delta', text: delta }),
     });

@@ -81,6 +81,27 @@ escapar. Para trabalho sensível, desligue o relato automático ou aponte o
 destino para um repositório privado em **Configurações → Detecção e relato de
 erros**.
 
+## Servidores MCP
+
+- Tokens OAuth de servidor MCP ficam no mesmo cofre AES-GCM das demais
+  credenciais (`mcp:<serverId>:oauth`).
+- O registro dinâmico (RFC 7591) usa `token_endpoint_auth_method: "none"` — a
+  extensão é um *public client*, sem segredo embutido, e o PKCE cobre esse caso.
+- O parâmetro `resource` (RFC 8707) amarra o token ao servidor MCP específico,
+  para um token vazado não valer em outro recurso do mesmo provedor.
+- **Escopo por repositório**: um servidor só entra no prompt dos repositórios em
+  que você o habilitou; nasce sem nenhum. Sem isso, um servidor MCP com memória
+  viraria um canal lateral entre repositórios, por fora do firewall de contexto.
+- A checagem de escopo é dupla (lista filtrada + verificação no executor), e a
+  segunda falha escala como `ContextIsolationError` — nunca é convertida em erro
+  de ferramenta.
+
+**O que isso não cobre:** as ferramentas de um servidor MCP são código de
+terceiro. O que elas retornam entra no contexto do modelo, então um servidor
+malicioso pode tentar influenciar o agente pelo conteúdo da resposta. Habilite
+apenas servidores em que você confia, e use a lista de ferramentas para desligar
+as que escrevem quando só precisa ler.
+
 ## Conteúdo do repositório é dado, não instrução
 
 O system prompt trata README, código e resultados de tools como material de
