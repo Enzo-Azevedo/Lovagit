@@ -10,12 +10,12 @@ export async function createProvider(config: ProviderConfig): Promise<AIProvider
   switch (config.kind) {
     case 'anthropic': {
       const apiKey = await getSecret(SecretNames.providerApiKey(config.id));
-      if (!apiKey) throw new ProviderError(`Configure a chave de API de ${config.label}.`);
+      if (!apiKey) throw new ProviderError(`Configure a chave de API de ${config.label}.`, 'auth');
       return createAnthropicProvider(config, apiKey);
     }
     case 'openai-compatible': {
       const apiKey = await getSecret(SecretNames.providerApiKey(config.id));
-      if (!apiKey) throw new ProviderError(`Configure a chave de API de ${config.label}.`);
+      if (!apiKey) throw new ProviderError(`Configure a chave de API de ${config.label}.`, 'auth');
       return createOpenAICompatibleProvider({
         id: config.id,
         label: config.label,
@@ -38,7 +38,7 @@ export async function createProvider(config: ProviderConfig): Promise<AIProvider
       });
     default: {
       const exhaustive: never = config;
-      throw new ProviderError(`Tipo de provedor desconhecido: ${JSON.stringify(exhaustive)}`);
+      throw new ProviderError(`Tipo de provedor desconhecido: ${JSON.stringify(exhaustive)}`, 'protocol');
     }
   }
 }

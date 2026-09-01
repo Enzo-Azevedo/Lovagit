@@ -92,13 +92,17 @@ export function createAnthropicProvider(
         };
       } catch (error) {
         if (error instanceof Anthropic.AuthenticationError) {
-          throw new ProviderError('Chave da Anthropic invalida ou sem permissao.', error);
+          throw new ProviderError('Chave da Anthropic invalida ou sem permissao.', 'auth', error);
         }
         if (error instanceof Anthropic.RateLimitError) {
-          throw new ProviderError('Limite de uso da Anthropic atingido. Tente em instantes.', error);
+          throw new ProviderError(
+            'Limite de uso da Anthropic atingido. Tente em instantes.',
+            'rate-limit',
+            error,
+          );
         }
         if (error instanceof Anthropic.APIError) {
-          throw new ProviderError(`Anthropic (${error.status}): ${error.message}`, error);
+          throw new ProviderError(`Anthropic (${error.status}): ${error.message}`, 'http', error);
         }
         throw error;
       }

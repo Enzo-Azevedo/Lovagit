@@ -9,6 +9,7 @@ import {
   saveRepoRef,
   saveSettings,
 } from '../lib/storage';
+import { captureError } from '../lib/telemetry/reporter';
 import type { RepoId, RepoRef, Settings } from '../lib/types';
 import { hasSecret, SecretNames } from '../lib/vault';
 
@@ -92,6 +93,11 @@ export function useRepos() {
           ...prev,
           error: error instanceof Error ? error.message : String(error),
         }));
+        void captureError(error, {
+          module: 'sidepanel/useRepos',
+          repoId: ref.id,
+          step: 'mapeamento',
+        });
         return null;
       } finally {
         setState((prev) => ({ ...prev, mappingRepoId: null, mappingStep: '' }));
@@ -111,6 +117,11 @@ export function useRepos() {
         await saveRepoMap(map);
       } catch (error) {
         setState((prev) => ({ ...prev, error: error instanceof Error ? error.message : String(error) }));
+        void captureError(error, {
+          module: 'sidepanel/useRepos',
+          repoId,
+          step: 'remapeamento',
+        });
       } finally {
         setState((prev) => ({ ...prev, mappingRepoId: null, mappingStep: '' }));
         await refresh();

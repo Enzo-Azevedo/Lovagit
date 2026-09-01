@@ -91,6 +91,13 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     { role: 'user', text: options.userText },
   ];
 
+  // Tudo que o usuario escreveu nesta conversa: separa "usuario citou outro
+  // repositorio" (bloqueio esperado) de "nosso codigo vazou" (defeito).
+  const userAuthoredText = [
+    ...options.history.filter((m) => m.role === 'user').map((m) => m.content),
+    options.userText,
+  ].join('\n');
+
   const pending = new Map<string, PendingFileChange>();
   let committed: ApplyResult | null = null;
   let awaitingApproval: string | null = null;
@@ -126,6 +133,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       scope,
       JSON.stringify({ system, turns }),
       options.connectedRepoIds,
+      userAuthoredText,
     );
 
     onEvent({ type: 'status', text: step === 0 ? 'Pensando...' : 'Analisando o repositorio...' });

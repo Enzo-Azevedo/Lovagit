@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { installErrorHandlers } from '../lib/telemetry/reporter';
 import { ChatView } from './ChatView';
+import { ErrorReportToast } from './ErrorReportToast';
 import { RepoPicker } from './RepoPicker';
 import { useRepos } from './useRepos';
 import { Button, ErrorNote, Spinner } from './ui';
@@ -8,6 +10,9 @@ export function App() {
   const { state, connect, remap, disconnect, syncGitHubUser } = useRepos();
   const [activeRepoId, setActiveRepoId] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+
+  // Pega o que escapou de todo try/catch da aplicacao.
+  useEffect(() => installErrorHandlers('sidepanel'), []);
 
   useEffect(() => {
     if (state.hasToken && !state.settings.githubUser) void syncGitHubUser();
@@ -118,6 +123,8 @@ export function App() {
           </Button>
         </div>
       )}
+
+      <ErrorReportToast />
     </div>
   );
 }

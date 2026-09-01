@@ -164,6 +164,11 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
         const detail = await response.text().catch(() => '');
         throw new ProviderError(
           `${options.label} respondeu ${response.status}: ${detail.slice(0, 300) || response.statusText}`,
+          response.status === 401 || response.status === 403
+            ? 'auth'
+            : response.status === 429 || response.status >= 500
+              ? 'rate-limit'
+              : 'http',
         );
       }
 
