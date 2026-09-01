@@ -82,6 +82,22 @@ npm run build
 No Chrome: `chrome://extensions` → ative **Modo do desenvolvedor** → **Carregar sem
 compactação** → selecione a pasta `dist/`.
 
+### Build pronto, sem compilar nada
+
+Cada push na `main` dispara o workflow `Build`, que roda os testes, compila e
+publica o zip:
+
+- **[Release `latest`](../../releases/tag/latest)** — sempre o último build da
+  `main`, com URL de download estável.
+- **`v<versão>`** — release estável, publicada quando o número de versão do
+  `package.json` muda.
+
+Baixe o zip, extraia e carregue a pasta em `chrome://extensions`.
+
+> Se a publicação da release falhar com `403`, o repositório está com as
+> permissões de workflow em modo leitura: **Settings → Actions → General →
+> Workflow permissions → Read and write permissions**.
+
 Clique no ícone da extensão para abrir o side panel.
 
 > Também funciona em Edge, Brave e Opera (mesma base Chromium). Firefox não é
@@ -322,6 +338,12 @@ src/
 | `npm run dev` | build em watch (recarregue a extensão no Chrome) |
 | `npm test` | suíte Vitest (isolamento, mapeamento, escrita, diff, streaming, relato de erros, MCP) |
 | `npm run typecheck` | só o `tsc --noEmit` |
+
+O workflow `.github/workflows/build.yml` roda exatamente `npm test` e
+`npm run build` — o que reprova localmente reprova no CI, e vice-versa. Ele ainda
+confere que todo caminho citado no `manifest.json` existe no `dist/`, porque um
+manifest apontando para arquivo inexistente só falha na hora de carregar a
+extensão.
 
 ## Limites conhecidos
 
