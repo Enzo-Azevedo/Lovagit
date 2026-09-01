@@ -1,0 +1,121 @@
+name: Build
+
+# Toda atualizacao da main gera um build instalavel. `workflow_dispatch` permite
+# rodar a mao sem precisar de um push.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Dois pushes seguidos na main disputariam a mesma release rolante; o run antigo
+# e cancelado para nao publicar um artefato ja obsoleto por cima do novo.
+concurrency:
+  group: build-main
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Testes
+        run: npm test
+
+      # `npm run build` roda `tsc --noEmit` antes do vite: um erro de tipo
+      # reprova o build em vez de virar um bundle quebrado.
+      - name: Build
+        run: npm run build
+
+      # A extensao so carrega se todo caminho citado no manifest existir no
+      # dist. Barato de checar aqui, caro de descobrir no "Load unpacked".
+      - name: Conferir o manifest contra o dist
+        run: |
+          node --input-type=module -e '
+            import { readFileSync, existsSync } from "node:fs";
+            const manifest = JSON.parse(readFileSync("dist/manifest.json", "utf8"));
+            const referenced = [
+              manifest.background.service_worker,
+              manifest.side_panel.default_path,
+              manifest.options_page,
+              ...Object.values(manifest.icons ?? {}),
+              ...Object.values(manifest.action?.default_icon ?? {}),
+            ];
+            const missing = referenced.filter((path) => !existsSync(`dist/${path}`));
+            if (missing.length > 0) {
+              console.error(`Arquivos citados no manifest e ausentes do dist: ${missing.join(", ")}`);
+              process.exit(1);
+            }
+            console.log(`manifest v${manifest.version}: ${referenced.length} caminhos conferidos`);
+          '
+
+      - name: Empacotar
+        id: package
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=${GITHUB_SHA::7}
+          mkdir -p out
+          # O zip precisa ter o manifest na raiz — daí o `cd dist`. Os
+          # sourcemaps ficam de fora: somam ~2 MB e o codigo-fonte ja esta
+          # neste repositorio, publico.
+          (cd dist && zip -qr "../out/lovagit-latest.zip" . -x '*.map')
+          cp "out/lovagit-latest.zip" "out/lovagit-${VERSION}.zip"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar artefato do run
+        uses: actions/upload-artifact@v4
+        with:
+          name: lovagit-${{ steps.package.outputs.version }}-${{ steps.package.outputs.short_sha }}
+          path: out/lovagit-latest.zip
+          retention-days: 90
+
+      # Release rolante: a tag `latest` sempre aponta para o ultimo build da
+      # main, com URL de download estavel. Recriar e mais simples (e mais
+      # confiavel) do que tentar mover a tag de uma release existente.
+      - name: Atualizar a release `latest`
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Build automatico da main.
+
+          Commit: ${GITHUB_SHA}
+          Versao do manifest: ${{ steps.package.outputs.version }}
+
+          Instalacao: baixe o zip, extraia, e em chrome://extensions ative o Modo do
+          desenvolvedor e use \"Carregar sem compactacao\" apontando para a pasta extraida."
+
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest out/lovagit-latest.zip \
+            --title "Build da main (${{ steps.package.outputs.short_sha }})" \
+            --notes "$NOTES" \
+            --prerelease \
+            --target "$GITHUB_SHA"
+
+      # Release versionada: sai uma vez por versao, quando o package.json muda.
+      # Sem isso, uma tag `v0.3.0` seria recriada a cada push e o historico de
+      # versoes nao serviria para nada.
+      - name: Publicar release da versao (quando o numero mudar)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "Release v${VERSION} ja existe — nada a publicar."
+            exit 0
+          fi
+          gh release create "v${VERSION}" "out/lovagit-${VERSION}.zip" \
+            --title "v${VERSION}" \
+            --generate-notes \
+            --target "$GITHUB_SHA"
