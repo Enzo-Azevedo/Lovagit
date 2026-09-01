@@ -16,8 +16,22 @@ import { assertRepoId } from '../storage';
  *      qualquer OUTRO repositorio conectado; se aparecer, a chamada aborta.
  */
 
+/**
+ * `foreign-repo-user-input` e' o firewall funcionando: o usuario citou outro
+ * repositorio e o pedido foi barrado. `foreign-repo-internal` e
+ * `scope-mismatch` sao defeitos nossos — contexto vazando por construcao — e
+ * por isso viram issue de alta prioridade.
+ */
+export type IsolationFailureKind =
+  | 'scope-mismatch'
+  | 'foreign-repo-user-input'
+  | 'foreign-repo-internal';
+
 export class ContextIsolationError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly kind: IsolationFailureKind = 'scope-mismatch',
+  ) {
     super(message);
     this.name = 'ContextIsolationError';
   }
@@ -36,6 +50,7 @@ export function createScope(repo: RepoRef): RepoScope {
   if (`${repo.owner}/${repo.name}` !== repo.id) {
     throw new ContextIsolationError(
       `Referencia inconsistente: id=${repo.id} mas owner/name=${repo.owner}/${repo.name}`,
+      'scope-mismatch',
     );
   }
   return Object.freeze({
@@ -51,6 +66,7 @@ export function assertScopedMap(scope: RepoScope, map: RepoMap): RepoMap {
   if (map.repoId !== scope.repoId) {
     throw new ContextIsolationError(
       `Mapa de ${map.repoId} nao pode ser usado na conversa de ${scope.repoId}`,
+      'scope-mismatch',
     );
   }
   return map;
@@ -70,14 +86,23 @@ export function assertNoForeignRepoLeak(
   scope: RepoScope,
   payload: string,
   connectedRepoIds: RepoId[],
+  /** Texto que o proprio usuario escreveu, para separar bloqueio de defeito. */
+  userAuthoredText = '',
 ): void {
   const haystack = payload.toLowerCase();
+  const fromUser = userAuthoredText.toLowerCase();
   for (const repoId of connectedRepoIds) {
     if (repoId === scope.repoId) continue;
-    if (haystack.includes(repoId.toLowerCase())) {
-      throw new ContextIsolationError(
-        `Vazamento de contexto bloqueado: o prompt de ${scope.repoId} mencionava ${repoId}.`,
-      );
-    }
+    const needle = repoId.toLowerCase();
+    if (!haystack.includes(needle)) continue;
+
+    const typedByUser = fromUser.includes(needle);
+    throw new ContextIsolationError(
+      typedByUser
+        ? `Pedido bloqueado: esta conversa e de ${scope.repoId} e a mensagem cita ${repoId}. ` +
+          'Abra o chat do outro repositorio para tratar dele.'
+        : `Vazamento de contexto bloqueado: o prompt de ${scope.repoId} mencionava ${repoId}.`,
+      typedByUser ? 'foreign-repo-user-input' : 'foreign-repo-internal',
+    );
   }
 }

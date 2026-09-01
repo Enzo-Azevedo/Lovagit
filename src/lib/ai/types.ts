@@ -44,9 +44,22 @@ export interface AIProvider {
   complete(request: CompletionRequest): Promise<CompletionResponse>;
 }
 
+/** Classificacao da falha, para o modulo de erros nao ter que adivinhar por
+ *  regex em cima da mensagem. */
+export type ProviderErrorKind =
+  /** Credencial invalida ou ausente — configuracao do usuario. */
+  | 'auth'
+  /** Cota estourada — passageiro. */
+  | 'rate-limit'
+  /** Resposta HTTP inesperada do provedor. */
+  | 'http'
+  /** Resposta fora do contrato esperado — provavel defeito de integracao. */
+  | 'protocol';
+
 export class ProviderError extends Error {
   constructor(
     message: string,
+    readonly kind: ProviderErrorKind = 'protocol',
     readonly cause?: unknown,
   ) {
     super(message);

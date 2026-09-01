@@ -51,7 +51,10 @@ async function exchange(
   });
   const raw = await response.text();
   if (!response.ok) {
-    throw new ProviderError(`Token endpoint respondeu ${response.status}: ${raw.slice(0, 300)}`);
+    throw new ProviderError(
+      `Token endpoint respondeu ${response.status}: ${raw.slice(0, 300)}`,
+      'http',
+    );
   }
   let parsed: {
     access_token?: string;
@@ -71,6 +74,7 @@ async function exchange(
   if (parsed.error || !parsed.access_token) {
     throw new ProviderError(
       `Falha no OAuth: ${parsed.error_description ?? parsed.error ?? 'sem access_token na resposta'}`,
+      'auth',
     );
   }
   return {
@@ -105,7 +109,7 @@ export async function loginWithOAuth(config: OAuthProviderConfig): Promise<Store
     url: authUrl.toString(),
     interactive: true,
   });
-  if (!redirectResponse) throw new ProviderError('Login cancelado.');
+  if (!redirectResponse) throw new ProviderError('Login cancelado.', 'auth');
 
   const returned = new URL(redirectResponse);
   const params = returned.searchParams.has('code')
@@ -115,13 +119,14 @@ export async function loginWithOAuth(config: OAuthProviderConfig): Promise<Store
   if (params.get('error')) {
     throw new ProviderError(
       `Provedor recusou o login: ${params.get('error_description') ?? params.get('error')}`,
+      'auth',
     );
   }
   if (params.get('state') !== state) {
-    throw new ProviderError('State do OAuth nao confere — login abortado por seguranca.');
+    throw new ProviderError('State do OAuth nao confere — login abortado por seguranca.', 'protocol');
   }
   const code = params.get('code');
-  if (!code) throw new ProviderError('O provedor nao devolveu um authorization code.');
+  if (!code) throw new ProviderError('O provedor nao devolveu um authorization code.', 'protocol');
 
   const tokens = await exchange(config, {
     grant_type: 'authorization_code',
@@ -151,13 +156,13 @@ export async function logoutOAuth(providerId: string): Promise<void> {
 /** Devolve um access token valido, renovando com refresh_token quando possivel. */
 export async function getValidAccessToken(config: OAuthProviderConfig): Promise<string> {
   const tokens = await getStoredTokens(config.id);
-  if (!tokens) throw new ProviderError(`Faca login em ${config.label} nas configuracoes.`);
+  if (!tokens) throw new ProviderError(`Faca login em ${config.label} nas configuracoes.`, 'auth');
 
   const expiringSoon = tokens.expiresAt !== undefined && tokens.expiresAt - Date.now() < 60_000;
   if (!expiringSoon) return tokens.accessToken;
 
   if (!tokens.refreshToken) {
-    throw new ProviderError(`A sessao em ${config.label} expirou. Faca login novamente.`);
+    throw new ProviderError(`A sessao em ${config.label} expirou. Faca login novamente.`, 'auth');
   }
   const refreshed = await exchange(config, {
     grant_type: 'refresh_token',

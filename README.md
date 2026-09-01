@@ -96,7 +96,8 @@ Clique no ícone da extensão para abrir o side panel.
 Em **Configurações → GitHub**, cole um Personal Access Token:
 
 - **Fine-grained** (recomendado): selecione os repositórios desejados e dê
-  `Contents: Read and write` + `Metadata: Read`.
+  `Contents: Read and write` + `Metadata: Read`. Para o relato automático de
+  erros, inclua também `Issues: Read and write` no repositório de destino.
 - **Clássico**: escopo `repo`.
 
 O token é cifrado com AES-GCM antes de ir para o `chrome.storage.local` — a chave
@@ -130,6 +131,65 @@ oferece um.
 Ligada por padrão: a IA cria o backup e commita sozinha ao terminar. Desligando,
 as alterações ficam no painel do chat esperando seu clique em **Commitar** — com
 diff arquivo a arquivo. Nos dois casos o backup é criado antes do commit.
+
+---
+
+## Detecção e relato de erros
+
+Um módulo interno captura as falhas, classifica, **redige** e abre issue em
+`Enzo-Azevedo/Lovagit` (configurável). Erros da própria extensão entram como
+prioridade máxima.
+
+### O que vira issue
+
+Só defeito. A classificação decide:
+
+| Situação | Categoria | Vira issue? | Labels |
+|---|---|---|---|
+| Exceção não tratada no código da extensão | bug / extensão | sim | `Alta Prioridade` + `lovagit:erro-extensao` |
+| Vazamento de contexto entre repositórios | bug / extensão | sim | `Alta Prioridade` + `lovagit:erro-extensao` |
+| GitHub recusa payload que a extensão montou (422) | bug / extensão | sim | `Alta Prioridade` + `lovagit:erro-extensao` |
+| Provedor de IA responde fora do contrato | bug / integração | sim | `lovagit:erro-integracao` |
+| Token inválido, sem permissão, 404 | configuração | não | — |
+| Offline, rate limit, 5xx, conflito de ref | transitório | não | — |
+| Firewall barrou mensagem citando outro repo | esperado | não | — |
+| Cancelamento pelo usuário | ignorado | não | — |
+
+Erro de configuração e falha passageira ficam só na interface e no histórico
+local: no tracker eles enterrariam o defeito de verdade.
+
+### O que sai da máquina
+
+O repositório de destino é público, então o relatório é redigido na origem:
+
+| Dado | Como sai |
+|---|---|
+| Nome do repositório | `repo#a1b2c3d4` (hash estável — agrupa sem revelar) |
+| Caminho de arquivo | `<arquivo .tsx>` |
+| PAT, chave de API, Bearer, JWT | `<token-github>`, `<chave-api>`, `<credencial>` |
+| E-mail | `<email>` |
+| URL da API | `api.github.com/repos/<repo>/...`, query string vira `?<params>` |
+| ID da extensão | `chrome-extension://<id>` |
+| Prompt, mensagem do chat, código | **não é enviado** |
+
+Sai: classe do erro, mensagem redigida, stack (até 20 quadros), módulo, versão,
+motor do navegador e a classificação.
+
+### Controle de volume
+
+- **Janela de 10s para cancelar** — o aviso mostra o issue que será aberto, com
+  `Cancelar envio`, `Ver o que será enviado` e `Enviar agora`.
+- **Fingerprint estável** (origem + módulo + classe + mensagem normalizada +
+  quadro de topo): a mesma falha comenta no issue existente em vez de abrir
+  outro, e reincidência dentro de 1h nem chega a fazer requisição.
+- **Teto de issues novos por hora** (padrão 5).
+- Issue fechado que volta a acontecer é reaberto com um comentário.
+
+Sem push access no repositório de destino o GitHub descarta as labels em
+silêncio — por isso a prioridade também vai escrita no corpo do issue.
+
+Tudo isso é configurável (ou desligável) em **Configurações → Detecção e relato
+de erros**, que também mostra o histórico local dos últimos 50 relatórios.
 
 ---
 
@@ -170,6 +230,13 @@ src/
    │  ├─ openai-compatible.ts endpoints estilo OpenAI (streaming SSE)
    │  ├─ oauth.ts             OAuth 2.0 + PKCE
    │  └─ registry.ts          fábrica de provedores
+   ├─ telemetry/
+   │  ├─ classify.ts          bug vs. configuração vs. transitório
+   │  ├─ redact.ts            redação antes de publicar
+   │  ├─ fingerprint.ts       agrupamento estável de ocorrências
+   │  ├─ format.ts            título, corpo e labels do issue
+   │  ├─ issues.ts            Issues API (labels, dedupe, comentário)
+   │  └─ reporter.ts          fila, janela de desfazer, cotas
    └─ agent/
       ├─ isolation.ts         firewall de contexto
       ├─ prompt.ts            system prompt por repositório
@@ -183,7 +250,7 @@ src/
 |---|---|
 | `npm run build` | typecheck + build de produção em `dist/` |
 | `npm run dev` | build em watch (recarregue a extensão no Chrome) |
-| `npm test` | suíte Vitest (isolamento, mapeamento, escrita, diff, streaming) |
+| `npm test` | suíte Vitest (isolamento, mapeamento, escrita, diff, streaming, relato de erros) |
 | `npm run typecheck` | só o `tsc --noEmit` |
 
 ## Limites conhecidos

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertNoForeignRepoLeak,
   assertScopedMap,
+  ContextIsolationError,
   createScope,
   scopedHistory,
 } from '../agent/isolation';
@@ -80,5 +81,33 @@ describe('assertNoForeignRepoLeak', () => {
     expect(() =>
       assertNoForeignRepoLeak(scope, 'o owner acme mantem varios projetos', connected),
     ).not.toThrow();
+  });
+});
+
+describe('assertNoForeignRepoLeak — bloqueio esperado vs. defeito', () => {
+  const scope = createScope(repo);
+  const connected = ['acme/site', 'acme/api'];
+
+  it('marca como entrada do usuario quando ele mesmo citou o outro repo', () => {
+    try {
+      assertNoForeignRepoLeak(
+        scope,
+        'payload com acme/api dentro',
+        connected,
+        'copia o login do acme/api aqui',
+      );
+      throw new Error('deveria ter lancado');
+    } catch (error) {
+      expect((error as ContextIsolationError).kind).toBe('foreign-repo-user-input');
+    }
+  });
+
+  it('marca como defeito quando o nome so aparece no payload que nos montamos', () => {
+    try {
+      assertNoForeignRepoLeak(scope, 'payload com acme/api dentro', connected, 'ajuste o header');
+      throw new Error('deveria ter lancado');
+    } catch (error) {
+      expect((error as ContextIsolationError).kind).toBe('foreign-repo-internal');
+    }
   });
 });

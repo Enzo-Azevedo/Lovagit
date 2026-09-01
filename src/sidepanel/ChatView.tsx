@@ -3,6 +3,7 @@ import { createProvider } from '../lib/ai/registry';
 import { runAgent, type AgentEvent } from '../lib/agent/loop';
 import { createScope } from '../lib/agent/isolation';
 import { applyChangesToMap } from '../lib/github/mapper';
+import { captureError } from '../lib/telemetry/reporter';
 import { applyChanges, restoreCheckpoint } from '../lib/github/writer';
 import {
   addCheckpoint,
@@ -192,6 +193,12 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
       if ((caught as Error)?.name !== 'AbortError') {
         setError(caught instanceof Error ? caught.message : String(caught));
       }
+      void captureError(caught, {
+        module: 'sidepanel/ChatView',
+        repoId: repo.id,
+        step: 'conversa',
+        providerKind: activeProvider.kind,
+      });
     } finally {
       // Cancelar ou falhar no meio nao pode apagar o que ja foi dito no chat.
       if (producedMessages.length > 0) {
@@ -218,6 +225,11 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
       await persistCheckpoint(result.checkpoint, pending);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+      void captureError(caught, {
+        module: 'sidepanel/ChatView',
+        repoId: repo.id,
+        step: 'commit',
+      });
     } finally {
       setApplying(false);
     }
@@ -240,6 +252,11 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         onRemap();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught));
+        void captureError(caught, {
+          module: 'sidepanel/ChatView',
+          repoId: repo.id,
+          step: 'restauracao',
+        });
       } finally {
         setApplying(false);
       }

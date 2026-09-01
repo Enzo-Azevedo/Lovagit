@@ -49,6 +49,38 @@ turnos) e aborta se encontrar o nome completo de qualquer outro repositório
 conectado. A comparação é por `owner/name`, então dois repositórios do mesmo dono
 não geram falso positivo.
 
+## Relato automático de erros
+
+O módulo de detecção de erros publica issues em um repositório **público**. Todo
+relatório é redigido antes de sair da máquina (`src/lib/telemetry/redact.ts`):
+
+- nome de repositório → `repo#<hash FNV-1a>`, estável entre relatórios;
+- caminho de arquivo → `<arquivo .ext>` (só a extensão sobrevive);
+- PAT, chave de API, `Authorization`, JWT e e-mail → placeholders;
+- URL da API → `api.github.com/repos/<repo>/...`, query string inteira → `?<params>`;
+- ID da extensão → `chrome-extension://<id>`.
+
+**Nunca é enviado:** prompt, mensagem do chat, conteúdo ou diff de arquivo.
+
+Três travas contra publicação indesejada:
+
+1. só `category: 'bug'` vira issue — erro de configuração e falha passageira
+   ficam na máquina;
+2. janela de 10 segundos para cancelar, com o corpo exato do issue visível antes
+   do envio;
+3. fingerprint + teto por hora, para uma falha em laço não virar centenas de
+   issues.
+
+O módulo nunca lança: `captureError` engole qualquer falha interna e uma falha
+no envio não pode gerar um novo relatório (`reportingInFlight`), senão um erro
+de rede viraria recursão infinita.
+
+Vale saber o que isso **não** cobre: a redação é baseada em padrões. Uma
+mensagem de erro de terceiro que embuta um segredo em formato desconhecido pode
+escapar. Para trabalho sensível, desligue o relato automático ou aponte o
+destino para um repositório privado em **Configurações → Detecção e relato de
+erros**.
+
 ## Conteúdo do repositório é dado, não instrução
 
 O system prompt trata README, código e resultados de tools como material de

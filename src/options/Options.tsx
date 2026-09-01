@@ -5,7 +5,9 @@ import { deleteSecret, getSecret, hasSecret, SecretNames, setSecret } from '../l
 import { PROVIDER_PRESETS, providerFromPreset } from '../lib/ai/presets';
 import { providerOrigin } from '../lib/ai/registry';
 import { getRedirectUri, getStoredTokens, loginWithOAuth, logoutOAuth } from '../lib/ai/oauth';
+import { installErrorHandlers } from '../lib/telemetry/reporter';
 import type { ProviderConfig, Settings } from '../lib/types';
+import { TelemetrySection } from './TelemetrySection';
 
 function Field({
   label,
@@ -61,6 +63,8 @@ export function Options() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => installErrorHandlers('options'), []);
 
   const saveToken = useCallback(async () => {
     const value = pat.trim();
@@ -395,6 +399,8 @@ export function Options() {
           </span>
         </label>
       </section>
+
+      <TelemetrySection />
     </div>
   );
 }
