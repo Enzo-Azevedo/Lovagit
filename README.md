@@ -138,6 +138,22 @@ que a chave está errada na primeira mensagem do chat é o pior momento possíve
 com **PKCE** via `chrome.identity.launchWebAuthFlow`, sem `client_secret` embutido
 (num bundle de navegador, segredo nenhum é segredo).
 
+### Quando o streaming cai
+
+Queda de conexão no meio de uma geração longa é comum com agregadores. O que a
+extensão faz:
+
+- **Texto parcial é preservado.** O que já chegou fica no chat e o turno encerra
+  com um aviso, em vez de a resposta inteira sumir.
+- **Tool call truncado é descartado.** Se a queda pegou uma chamada de ferramenta
+  pela metade, ela nunca é executada — um `write_file` com JSON cortado gravaria
+  um arquivo truncado no seu repositório.
+- **Erro em banda vira erro de verdade.** Agregadores podem responder `HTTP 200`
+  e reportar a falha *dentro* do stream, num frame com `error` e `choices` vazio.
+  Sem tratar isso, o turno termina vazio e parece sucesso — o pior modo de falha,
+  porque nada aparece para o usuário.
+- Nenhuma dessas situações abre issue: são falhas passageiras, não defeitos.
+
 > **Anthropic e OpenAI não entram aqui.** A Anthropic restringe o OAuth ao Claude
 > Code e ao claude.ai e [não registra `client_id` para terceiros](https://claude.com/docs/connectors/building/authentication);
 > desde fevereiro de 2026 os termos [proíbem explicitamente](https://www.theregister.com/software/2026/02/20/anthropic-clarifies-ban-on-third-party-tool-access-to-claude/5014546)

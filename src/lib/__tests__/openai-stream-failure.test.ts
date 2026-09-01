@@ -23,21 +23,13 @@ function providerWith(fetchImpl: typeof fetch) {
 const pedido = { system: 'sistema', turns: [{ role: 'user' as const, text: 'oi' }], tools: [] };
 
 describe('falha de rede no streaming', () => {
-  it('vira ProviderError de rede quando o stream e interrompido', async () => {
-    // O chunk sai numa chamada de `pull` e o erro na seguinte: enfileirar e
-    // errar na mesma tick faz o stream descartar o que estava na fila, e o
-    // caso que interessa aqui e justamente o texto que chegou antes da queda.
+  it('vira ProviderError de rede quando cai sem nada ter chegado', async () => {
+    // Sem texto util, a queda e erro mesmo — nao ha resposta parcial a
+    // preservar. (O caso com texto parcial esta em "preservacao do texto
+    // parcial": la a resposta e devolvida em vez de descartada.)
     const provider = providerWith((async () => {
-      let etapa = 0;
       const body = new ReadableStream({
-        pull(controller) {
-          if (etapa === 0) {
-            etapa += 1;
-            controller.enqueue(
-              new TextEncoder().encode('data: {"choices":[{"delta":{"content":"parcial"}}]}\n\n'),
-            );
-            return;
-          }
+        start(controller) {
           controller.error(new TypeError('network error'));
         },
       });
@@ -48,9 +40,7 @@ describe('falha de rede no streaming', () => {
 
     expect(erro).toBeInstanceOf(ProviderError);
     expect((erro as ProviderError).kind).toBe('network');
-    // A mensagem precisa dizer o que aconteceu e quanto chegou antes da queda.
     expect((erro as ProviderError).message).toContain('caiu durante a resposta');
-    expect((erro as ProviderError).message).toContain('7 caractere(s)');
   });
 
   it('vira ProviderError de rede quando a requisicao nem sai', async () => {
@@ -84,5 +74,118 @@ describe('falha de rede no streaming', () => {
 
     expect(erro).not.toBeInstanceOf(ProviderError);
     expect((erro as Error).name).toBe('AbortError');
+  });
+});
+
+describe('erro em banda (HTTP 200 com erro dentro do stream)', () => {
+  function streamOf(...frames: string[]) {
+    return (async () => {
+      let etapa = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          if (etapa < frames.length) {
+            controller.enqueue(new TextEncoder().encode(frames[etapa]));
+            etapa += 1;
+            return;
+          }
+          controller.close();
+        },
+      });
+      return new Response(body, { status: 200 });
+    }) as unknown as typeof fetch;
+  }
+
+  it('nao deixa erro do agregador virar resposta vazia silenciosa', async () => {
+    // Agregadores respondem 200 e reportam a falha dentro do stream. Ignorar
+    // esse frame fazia o turno terminar vazio, sem erro nenhum na interface.
+    const provider = providerWith(
+      streamOf(
+        'data: {"choices":[{"delta":{"content":"comecou"}}]}\n\n',
+        'data: {"error":{"message":"Provider returned error","code":502},"choices":[]}\n\n',
+      ),
+    );
+
+    const erro = (await provider.complete(pedido).catch((c: unknown) => c)) as ProviderError;
+
+    expect(erro).toBeInstanceOf(ProviderError);
+    expect(erro.message).toContain('Provider returned error');
+    expect(erro.message).toContain('502');
+    // 502 e passageiro: nao deve abrir issue.
+    expect(erro.kind).toBe('rate-limit');
+  });
+
+  it('classifica erro de credencial em banda como auth', async () => {
+    const provider = providerWith(
+      streamOf('data: {"error":{"message":"No auth credentials","code":401},"choices":[]}\n\n'),
+    );
+    const erro = (await provider.complete(pedido).catch((c: unknown) => c)) as ProviderError;
+    expect(erro.kind).toBe('auth');
+  });
+
+  it('ignora os comentarios de keep-alive do OpenRouter', async () => {
+    // ": OPENROUTER PROCESSING" nao e JSON; tratar como dado quebra o parse.
+    const provider = providerWith(
+      streamOf(
+        ': OPENROUTER PROCESSING\n\n',
+        'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ),
+    );
+    const resposta = await provider.complete(pedido);
+    expect(resposta.text).toBe('ok');
+  });
+});
+
+describe('preservacao do texto parcial', () => {
+  it('devolve o que chegou quando a queda nao tem tool call pendente', async () => {
+    const provider = providerWith((async () => {
+      let etapa = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          if (etapa === 0) {
+            etapa += 1;
+            controller.enqueue(
+              new TextEncoder().encode('data: {"choices":[{"delta":{"content":"resposta parcial"}}]}\n\n'),
+            );
+            return;
+          }
+          controller.error(new TypeError('network error'));
+        },
+      });
+      return new Response(body, { status: 200 });
+    }) as unknown as typeof fetch);
+
+    const resposta = await provider.complete(pedido);
+
+    expect(resposta.text).toBe('resposta parcial');
+    expect(resposta.stopReason).toBe('interrupted');
+    expect(resposta.toolCalls).toEqual([]);
+  });
+
+  it('descarta tool call truncado em vez de devolver argumentos pela metade', async () => {
+    // Um write_file com JSON cortado escreveria um arquivo truncado no repo.
+    const provider = providerWith((async () => {
+      let etapa = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          if (etapa === 0) {
+            etapa += 1;
+            controller.enqueue(
+              new TextEncoder().encode(
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"write_file","arguments":"{\\"path\\":\\"a.ts\\",\\"content\\":\\"metade"}}]}}]}\n\n',
+              ),
+            );
+            return;
+          }
+          controller.error(new TypeError('network error'));
+        },
+      });
+      return new Response(body, { status: 200 });
+    }) as unknown as typeof fetch);
+
+    const erro = (await provider.complete(pedido).catch((c: unknown) => c)) as ProviderError;
+
+    expect(erro).toBeInstanceOf(ProviderError);
+    expect(erro.kind).toBe('network');
   });
 });
