@@ -1,5 +1,6 @@
 import { ContextIsolationError } from '../agent/isolation';
 import { GitHubError } from '../github/client';
+import { McpError } from '../mcp/types';
 import { ProviderError } from '../ai/types';
 import type { ErrorCategory, ErrorOrigin } from './types';
 
@@ -19,11 +20,18 @@ function isAbort(error: unknown): boolean {
   );
 }
 
-/** `fetch` rejeita com TypeError quando a rede cai ou a origem nao foi permitida. */
+/**
+ * `fetch` e a leitura de um stream rejeitam com TypeError quando a rede cai ou
+ * a origem nao foi permitida. As mensagens variam por navegador e por momento
+ * da falha — o Chrome usa "Failed to fetch" na requisicao e "network error"
+ * quando o stream e interrompido no meio.
+ */
 function isNetworkFailure(error: unknown): boolean {
   return (
     error instanceof TypeError &&
-    /failed to fetch|networkerror|load failed|network request failed/i.test(error.message)
+    /failed to fetch|network\s*error|load failed|network request failed|connection closed/i.test(
+      error.message,
+    )
   );
 }
 
@@ -65,6 +73,31 @@ export function classifyError(error: unknown): Classification {
       category: 'bug',
       name: 'ContextIsolationError',
       reason: 'Contexto de outro repositorio entrou no prompt por construcao — defeito grave.',
+    };
+  }
+
+  if (error instanceof McpError) {
+    if (error.kind === 'unauthorized') {
+      return {
+        origin: 'integration',
+        category: 'user-config',
+        name: 'McpError',
+        reason: 'Servidor MCP exige autorizacao ou recusou a credencial.',
+      };
+    }
+    if (error.kind === 'transport' || error.kind === 'session-expired') {
+      return {
+        origin: 'integration',
+        category: 'transient',
+        name: 'McpError',
+        reason: 'Falha de transporte ou sessao expirada no servidor MCP.',
+      };
+    }
+    return {
+      origin: 'integration',
+      category: 'bug',
+      name: 'McpError',
+      reason: 'Servidor MCP respondeu fora do protocolo.',
     };
   }
 
@@ -143,6 +176,14 @@ export function classifyError(error: unknown): Classification {
         category: 'transient',
         name: 'ProviderError',
         reason: 'Cota do provedor de IA atingida.',
+      };
+    }
+    if (error.kind === 'network') {
+      return {
+        origin: 'integration',
+        category: 'transient',
+        name: 'ProviderError',
+        reason: 'Conexao com o provedor nao estabelecida ou interrompida.',
       };
     }
     return {

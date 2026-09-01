@@ -53,6 +53,8 @@ export type ProviderErrorKind =
   | 'rate-limit'
   /** Resposta HTTP inesperada do provedor. */
   | 'http'
+  /** Conexao nao estabelecida ou interrompida — passageiro, nao e defeito. */
+  | 'network'
   /** Resposta fora do contrato esperado — provavel defeito de integracao. */
   | 'protocol';
 
