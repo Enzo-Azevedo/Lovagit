@@ -135,6 +135,22 @@ describe('captureError — o que nao vira issue', () => {
     expect((await reporter.getReportLog())[0].status).toBe('ignorado');
   });
 
+  // Regressao da issue #5: essa falha abriu um issue de Alta Prioridade em uso
+  // real, quando deveria ter ficado apenas na interface.
+  it('queda de conexao no meio do stream nao abre issue', async () => {
+    const { reporter } = await freshReporter();
+    await reporter.captureError(new TypeError('network error'), {
+      module: 'sidepanel/ChatView',
+      repoId: 'acme/site',
+      providerKind: 'openai-compatible',
+      step: 'conversa',
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(issues.createIssue).not.toHaveBeenCalled();
+    expect((await reporter.getReportLog())[0].status).toBe('ignorado');
+  });
+
   it('cancelamento do usuario e ignorado por completo', async () => {
     const { reporter } = await freshReporter();
     await reporter.captureError(new DOMException('cancelado', 'AbortError'), { module: 'agent/loop' });

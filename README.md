@@ -177,6 +177,10 @@ Só defeito. A classificação decide:
 | Provedor de IA responde fora do contrato | bug / integração | sim | `lovagit:erro-integracao` |
 | Token inválido, sem permissão, 404 | configuração | não | — |
 | Offline, rate limit, 5xx, conflito de ref | transitório | não | — |
+| Conexão com o provedor caiu (inclusive no meio do streaming) | transitório | não | — |
+| Servidor MCP fora do ar ou sessão expirada | transitório | não | — |
+| Servidor MCP exigindo autorização | configuração | não | — |
+| Servidor MCP fora do protocolo | bug / integração | sim | `lovagit:erro-integracao` |
 | Firewall barrou mensagem citando outro repo | esperado | não | — |
 | Cancelamento pelo usuário | ignorado | não | — |
 

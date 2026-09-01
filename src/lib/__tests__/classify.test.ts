@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { classifyError } from '../telemetry/classify';
 import { ContextIsolationError } from '../agent/isolation';
 import { GitHubError } from '../github/client';
+import { McpError } from '../mcp/types';
 import { ProviderError } from '../ai/types';
 
 describe('classifyError — o que NAO vira issue', () => {
@@ -11,6 +12,41 @@ describe('classifyError — o que NAO vira issue', () => {
 
   it('trata queda de rede como passageiro', () => {
     expect(classifyError(new TypeError('Failed to fetch')).category).toBe('transient');
+  });
+
+  // Regressao da issue #5: o Chrome usa "network error" (com espaco) quando a
+  // leitura de um stream e interrompida, e a regex antiga so cobria
+  // "networkerror". A falha virava issue de alta prioridade.
+  it('reconhece as variantes de mensagem de falha de rede entre navegadores', () => {
+    const variantes = [
+      'network error',
+      'Failed to fetch',
+      'NetworkError when attempting to fetch resource.',
+      'Load failed',
+      'Network request failed',
+    ];
+    for (const mensagem of variantes) {
+      expect(classifyError(new TypeError(mensagem)), mensagem).toMatchObject({
+        category: 'transient',
+      });
+    }
+  });
+
+  it('trata conexao interrompida com o provedor como passageiro', () => {
+    expect(classifyError(new ProviderError('a conexao caiu', 'network')).category).toBe('transient');
+  });
+
+  it('trata falha de transporte do MCP como passageira, nao como defeito', () => {
+    expect(classifyError(new McpError('servidor fora do ar', 'srv', 'transport')).category).toBe(
+      'transient',
+    );
+    expect(classifyError(new McpError('sessao expirou', 'srv', 'session-expired')).category).toBe(
+      'transient',
+    );
+  });
+
+  it('trata servidor MCP pedindo autorizacao como configuracao', () => {
+    expect(classifyError(new McpError('401', 'srv', 'unauthorized')).category).toBe('user-config');
   });
 
   it('trata token invalido como configuracao do usuario', () => {
@@ -54,6 +90,12 @@ describe('classifyError — o que vira issue', () => {
     expect(result.category).toBe('bug');
     expect(result.origin).toBe('extension');
     expect(result.status).toBe(422);
+  });
+
+  it('marca resposta fora do protocolo MCP como defeito de integracao', () => {
+    const result = classifyError(new McpError('JSON-RPC invalido', 'srv', 'protocol'));
+    expect(result.category).toBe('bug');
+    expect(result.origin).toBe('integration');
   });
 
   it('marca resposta fora do contrato do provedor como defeito de integracao', () => {

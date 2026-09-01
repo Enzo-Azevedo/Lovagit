@@ -130,7 +130,11 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
     model: options.model,
     async complete(request: CompletionRequest): Promise<CompletionResponse> {
       const token = await options.getAuthToken();
-      const response = await fetch(normalizeBaseUrl(options.baseUrl), {
+      const endpoint = normalizeBaseUrl(options.baseUrl);
+
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -157,8 +161,19 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
                 })),
               }
             : {}),
-        }),
-      });
+          }),
+        });
+      } catch (error) {
+        // Numa extensao, a causa mais comum de a primeira requisicao nem sair e
+        // a origem nao ter permissao de host — vale dizer isso em vez de
+        // repassar o "Failed to fetch" seco.
+        throw new ProviderError(
+          `Nao foi possivel alcancar ${endpoint}. Verifique a conexao e se a extensao tem ` +
+            'permissao para essa origem (a permissao e pedida ao salvar a chave nas configuracoes).',
+          'network',
+          error,
+        );
+      }
 
       if (!response.ok || !response.body) {
         const detail = await response.text().catch(() => '');
@@ -181,24 +196,37 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
 
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
       let buffer = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += value;
-        const events = buffer.split('\n\n');
-        buffer = events.pop() ?? '';
-        for (const event of events) {
-          for (const line of event.split('\n')) {
-            if (!line.startsWith('data:')) continue;
-            const payload = line.slice(5).trim();
-            if (!payload || payload === '[DONE]') continue;
-            try {
-              applyChunk(acc, JSON.parse(payload) as StreamChunk, request.onText);
-            } catch {
-              // Chunk malformado: ignora em vez de derrubar a conversa inteira.
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += value;
+          const events = buffer.split('\n\n');
+          buffer = events.pop() ?? '';
+          for (const event of events) {
+            for (const line of event.split('\n')) {
+              if (!line.startsWith('data:')) continue;
+              const payload = line.slice(5).trim();
+              if (!payload || payload === '[DONE]') continue;
+              try {
+                applyChunk(acc, JSON.parse(payload) as StreamChunk, request.onText);
+              } catch {
+                // Chunk malformado: ignora em vez de derrubar a conversa inteira.
+              }
             }
           }
         }
+      } catch (error) {
+        // O Chrome rejeita a leitura com `TypeError: network error` quando a
+        // conexao cai no meio do stream. Cru, isso nao diz nada ao usuario e
+        // ainda passava por defeito da extensao na classificacao.
+        if (request.signal?.aborted) throw error;
+        throw new ProviderError(
+          `A conexao com ${options.label} caiu durante a resposta ` +
+            `(${acc.text.length} caractere(s) recebidos). Tente enviar de novo.`,
+          'network',
+          error,
+        );
       }
 
       return {
