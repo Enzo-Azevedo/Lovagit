@@ -49,6 +49,7 @@ function runtime(mcpServers: McpServerConfig[]) {
     onPendingChanged: () => {},
     onCommitted: async () => {},
     onAwaitingApproval: () => {},
+    onRemember: () => {},
   };
 }
 

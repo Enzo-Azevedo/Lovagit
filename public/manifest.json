@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Lovagit",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Um chat de IA por repositorio do GitHub, com contexto isolado e commits com branch de backup automatica.",
   "minimum_chrome_version": "116",
   "action": {
@@ -28,6 +28,7 @@
   },
   "options_page": "options/index.html",
   "permissions": ["storage", "sidePanel", "identity"],
+  "optional_permissions": ["unlimitedStorage"],
   "host_permissions": ["https://api.github.com/*"],
   "optional_host_permissions": ["https://*/*"],
   "content_security_policy": {

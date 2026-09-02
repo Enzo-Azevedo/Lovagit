@@ -9,6 +9,7 @@ import { getRedirectUri, getStoredTokens, loginWithOAuth, logoutOAuth } from '..
 import { installErrorHandlers } from '../lib/telemetry/reporter';
 import type { ProviderConfig, Settings } from '../lib/types';
 import { McpSection } from './McpSection';
+import { MemorySection } from './MemorySection';
 import { TelemetrySection } from './TelemetrySection';
 
 function Field({
@@ -494,6 +495,8 @@ export function Options() {
           </span>
         </label>
       </section>
+
+      <MemorySection />
 
       <McpSection />
 

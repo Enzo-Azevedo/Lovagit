@@ -13,6 +13,30 @@ const MAX_READ_BYTES = 200_000;
 
 export const TOOL_SCHEMAS: ToolSchema[] = [
   {
+    name: 'remember',
+    description:
+      'Grava um fato duradouro na memoria DESTE repositorio: uma decisao tomada, uma ' +
+      'convencao combinada, algo que o usuario recusou. Use com parcimonia — o que ' +
+      'vale e o que ainda sera verdade daqui a semanas. Nao registre o que ja ' +
+      'esta no codigo (isso se le com read_file), nem o passo a passo do que voce acabou ' +
+      'de fazer (commits ja entram na memoria sozinhos).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        summary: {
+          type: 'string',
+          description: 'Uma linha, no maximo 280 caracteres. O fato em si.',
+        },
+        detail: {
+          type: 'string',
+          description: 'Contexto opcional: por que ficou assim. Some primeiro quando a memoria aperta.',
+        },
+      },
+      required: ['summary'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'list_directory',
     description:
       'Lista arquivos e subdiretorios de um caminho do repositorio. Use "" ou "." para a raiz. ' +
@@ -121,6 +145,8 @@ export interface ToolRuntime {
   onCommitted: (result: ApplyResult) => Promise<void>;
   /** Chamado quando ha alteracoes aguardando aprovacao manual do usuario. */
   onAwaitingApproval: (message: string) => void;
+  /** Fato que o modelo quer guardar na memoria deste repositorio. */
+  onRemember: (summary: string, detail?: string) => void;
 }
 
 function ok(call: ToolCall, content: string): ToolResult {
@@ -209,6 +235,14 @@ export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise
     if (call.name.startsWith('mcp__')) return await executeMcpTool(runtime, call);
 
     switch (call.name) {
+      case 'remember': {
+        const summary = String(call.input.summary ?? '').trim();
+        if (summary === '') return fail(call, 'remember exige um `summary` nao vazio.');
+        const detail = call.input.detail === undefined ? undefined : String(call.input.detail);
+        runtime.onRemember(summary, detail);
+        return ok(call, 'Registrado na memoria deste repositorio.');
+      }
+
       case 'list_directory':
         return ok(call, listDirectory(runtime, String(call.input.path ?? '')));
 
