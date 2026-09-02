@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Lovagit",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Um chat de IA por repositorio do GitHub, com contexto isolado e commits com branch de backup automatica.",
   "minimum_chrome_version": "116",
   "action": {
