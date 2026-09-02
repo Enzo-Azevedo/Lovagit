@@ -1,6 +1,13 @@
 import type { AIProvider, ProviderTurn } from '../ai/types';
 import type { ApplyResult } from '../github/writer';
-import type { ChatMessage, PendingFileChange, RepoId, RepoMap, ToolCall } from '../types';
+import type {
+  ChatAttachment,
+  ChatMessage,
+  PendingFileChange,
+  RepoId,
+  RepoMap,
+  ToolCall,
+} from '../types';
 import { assertNoForeignRepoLeak, assertScopedMap, type RepoScope } from './isolation';
 import { buildSystemPrompt } from './prompt';
 import { executeTool, TOOL_SCHEMAS, type ToolRuntime } from './tools';
@@ -27,6 +34,7 @@ export interface RunAgentOptions {
   /** Historico ja filtrado pelo repositorio da conversa. */
   history: ChatMessage[];
   userText: string;
+  attachments?: ChatAttachment[];
   provider: AIProvider;
   autoApply: boolean;
   /** Todos os repositorios conectados — usado apenas pelo canario de vazamento. */
@@ -50,7 +58,7 @@ export function historyToTurns(history: ChatMessage[]): ProviderTurn[] {
   const turns: ProviderTurn[] = [];
   for (const message of window) {
     if (message.role === 'user') {
-      turns.push({ role: 'user', text: message.content });
+      turns.push({ role: 'user', text: message.content, images: message.attachments });
     } else if (message.role === 'assistant') {
       turns.push({
         role: 'assistant',
@@ -81,6 +89,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     repoId,
     role: 'user',
     content: options.userText,
+    attachments: options.attachments && options.attachments.length > 0 ? options.attachments : undefined,
     createdAt: Date.now(),
   };
   produced.push(userMessage);
@@ -88,7 +97,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
 
   const turns: ProviderTurn[] = [
     ...historyToTurns(options.history),
-    { role: 'user', text: options.userText },
+    { role: 'user', text: options.userText, images: options.attachments },
   ];
 
   // Tudo que o usuario escreveu nesta conversa: separa "usuario citou outro

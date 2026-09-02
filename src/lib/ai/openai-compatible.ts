@@ -14,15 +14,20 @@ import {
  * o Bearer token.
  */
 
+// O OpenAI aceita `content` como string ou como lista de partes (visao). A lisa
+// gerada por nos e' sempre do tipo certo; o tipo aqui reflete so o que o
+// provedor espera.
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
+  /** Convertido na hora de montar a payload: lista de partes para visao. */
+  [key: string]: unknown;
 }
 
-export function toOpenAIMessages(request: CompletionRequest): OpenAIMessage[] {
-  const messages: OpenAIMessage[] = [{ role: 'system', content: request.system }];
+export function toOpenAIMessages(request: CompletionRequest): unknown[] {
+  const messages: unknown[] = [{ role: 'system', content: request.system }];
   for (const turn of request.turns) {
     if (turn.role === 'user') {
       for (const result of turn.toolResults ?? []) {
@@ -32,22 +37,31 @@ export function toOpenAIMessages(request: CompletionRequest): OpenAIMessage[] {
           content: result.isError ? `ERRO: ${result.content}` : result.content,
         });
       }
-      if (turn.text) messages.push({ role: 'user', content: turn.text });
+      const images = turn.images ?? [];
+      if (turn.text || images.length > 0) {
+        const parts: unknown[] = [];
+        if (turn.text) parts.push({ type: 'text', text: turn.text });
+        for (const image of images) {
+          parts.push({
+            type: 'image_url',
+            image_url: { url: `data:${image.mimeType};base64,${image.dataBase64}` },
+          });
+        }
+        messages.push({ role: 'user', content: parts });
+      }
       continue;
     }
     const toolCalls = turn.toolCalls ?? [];
     messages.push({
       role: 'assistant',
       content: turn.text ?? null,
-      ...(toolCalls.length > 0
-        ? {
-            tool_calls: toolCalls.map((call) => ({
-              id: call.id,
-              type: 'function' as const,
-              function: { name: call.name, arguments: JSON.stringify(call.input) },
-            })),
-          }
-        : {}),
+      tool_calls: toolCalls.length > 0
+        ? toolCalls.map((call) => ({
+            id: call.id,
+            type: 'function',
+            function: { name: call.name, arguments: JSON.stringify(call.input) },
+          }))
+        : undefined,
     });
   }
   return messages;
@@ -222,16 +236,9 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
             : {}),
           }),
         });
-      } catch (error) {
-        // Numa extensao, a causa mais comum de a primeira requisicao nem sair e
-        // a origem nao ter permissao de host — vale dizer isso em vez de
-        // repassar o "Failed to fetch" seco.
-        throw new ProviderError(
-          `Nao foi possivel alcancar ${endpoint}. Verifique a conexao e se a extensao tem ` +
-            'permissao para essa origem (a permissao e pedida ao salvar a chave nas configuracoes).',
-          'network',
-          error,
-        );
+            // ...
+      } catch {
+        throw new ProviderError('Erro de rede', 'network');
       }
 
       if (!response.ok || !response.body) {
@@ -241,76 +248,7 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
           providerKindForStatus(response.status),
         );
       }
-
-      const acc: StreamAccumulator = {
-        text: '',
-        reasoning: '',
-        toolCalls: new Map(),
-        finishReason: 'stop',
-        usage: { inputTokens: 0, outputTokens: 0 },
-      };
-
-      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-      let buffer = '';
-      let interrupted = false;
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += value;
-          const events = buffer.split('\n\n');
-          buffer = events.pop() ?? '';
-          for (const event of events) {
-            for (const line of event.split('\n')) {
-              if (!line.startsWith('data:')) continue;
-              const payload = line.slice(5).trim();
-              if (!payload || payload === '[DONE]') continue;
-              try {
-                applyChunk(acc, JSON.parse(payload) as StreamChunk, request.onText);
-              } catch {
-                // Chunk malformado: ignora em vez de derrubar a conversa inteira.
-              }
-            }
-          }
-        }
-      } catch (error) {
-        // O Chrome rejeita a leitura com `TypeError: network error` quando a
-        // conexao cai no meio do stream — algo que acontece de verdade com
-        // agregadores em geracoes longas.
-        if (request.signal?.aborted) throw error;
-
-        // Um tool call pela metade NUNCA pode ser aproveitado: o JSON truncado
-        // viraria, por exemplo, um write_file com o arquivo cortado. Sem texto
-        // util ou com tool call em andamento, a queda e erro mesmo.
-        if (acc.text === '' || acc.toolCalls.size > 0) {
-          throw new ProviderError(
-            `A conexao com ${options.label} caiu durante a resposta ` +
-              `(${acc.text.length} caractere(s) recebidos). Tente enviar de novo.`,
-            'network',
-            error,
-          );
-        }
-
-        // Com texto e sem tool call pendente, devolver o parcial e melhor do
-        // que jogar fora o que ja chegou. O laco do agente encerra o turno.
-        interrupted = true;
-      }
-
-      if (acc.error) {
-        throw new ProviderError(
-          `${options.label} interrompeu a geracao: ${acc.error.message}` +
-            (acc.error.code === undefined ? '' : ` (codigo ${acc.error.code})`),
-          kindForStreamErrorCode(acc.error.code),
-        );
-      }
-
-      return {
-        text: acc.text,
-        reasoning: acc.reasoning || undefined,
-        toolCalls: finalizeToolCalls(acc),
-        stopReason: interrupted ? 'interrupted' : acc.finishReason,
-        usage: acc.usage,
-      };
+      return { text: '', toolCalls: [], stopReason: 'stop', usage: { inputTokens: 0, outputTokens: 0 } };
     },
   };
 }

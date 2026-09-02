@@ -2,6 +2,13 @@
  *  esse formato como chave de isolamento — nunca o id numerico do GitHub. */
 export type RepoId = string;
 
+/** Imagem anexada a uma mensagem do chat. Persistida na conversa como base64. */
+export interface ChatAttachment {
+  name: string;
+  mimeType: string;
+  dataBase64: string;
+}
+
 export interface RepoRef {
   id: RepoId;
   owner: string;
@@ -57,6 +64,7 @@ export interface ChatMessage {
   repoId: RepoId;
   role: ChatRole;
   content: string;
+  attachments?: ChatAttachment[];
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
   createdAt: number;
