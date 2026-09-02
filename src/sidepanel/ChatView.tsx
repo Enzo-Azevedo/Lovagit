@@ -3,8 +3,7 @@ import { createProvider } from '../lib/ai/registry';
 import { runAgent, type AgentEvent } from '../lib/agent/loop';
 import { createScope } from '../lib/agent/isolation';
 import { applyChangesToMap } from '../lib/github/mapper';
-import { getServersForRepo } from '../lib/mcp/registry';
-import { captureError } from '../lib/telemetry/reporter';
+import { captureError } from '../lib/errlog';
 import { applyChanges, restoreCheckpoint } from '../lib/github/writer';
 import {
   addCheckpoint,
@@ -136,8 +135,6 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
       const provider = await createProvider(activeProvider);
       const scope = createScope(repo);
       history = await getChat(repo.id);
-      // So os servidores MCP habilitados para ESTE repositorio.
-      const mcpServers = await getServersForRepo(repo.id);
 
       const onEvent = (event: AgentEvent) => {
         switch (event.type) {
@@ -189,7 +186,6 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         provider,
         autoApply: settings.autoApplyChanges,
         connectedRepoIds: settings.connectedRepoIds,
-        mcpServers,
         signal: controller.signal,
         onEvent,
       });
@@ -197,7 +193,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
       if ((caught as Error)?.name !== 'AbortError') {
         setError(caught instanceof Error ? caught.message : String(caught));
       }
-      void captureError(caught, {
+      captureError(caught, {
         module: 'sidepanel/ChatView',
         repoId: repo.id,
         step: 'conversa',
@@ -229,7 +225,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
       await persistCheckpoint(result.checkpoint, pending);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
-      void captureError(caught, {
+      captureError(caught, {
         module: 'sidepanel/ChatView',
         repoId: repo.id,
         step: 'commit',
@@ -256,7 +252,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         onRemap();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught));
-        void captureError(caught, {
+        captureError(caught, {
           module: 'sidepanel/ChatView',
           repoId: repo.id,
           step: 'restauracao',

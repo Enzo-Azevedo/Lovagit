@@ -9,8 +9,7 @@ import {
   saveRepoRef,
   saveSettings,
 } from '../lib/storage';
-import { pruneRepoFromServers } from '../lib/mcp/registry';
-import { captureError } from '../lib/telemetry/reporter';
+import { captureError } from '../lib/errlog';
 import type { RepoId, RepoRef, Settings } from '../lib/types';
 import { hasSecret, SecretNames } from '../lib/vault';
 
@@ -94,7 +93,7 @@ export function useRepos() {
           ...prev,
           error: error instanceof Error ? error.message : String(error),
         }));
-        void captureError(error, {
+        captureError(error, {
           module: 'sidepanel/useRepos',
           repoId: ref.id,
           step: 'mapeamento',
@@ -118,7 +117,7 @@ export function useRepos() {
         await saveRepoMap(map);
       } catch (error) {
         setState((prev) => ({ ...prev, error: error instanceof Error ? error.message : String(error) }));
-        void captureError(error, {
+        captureError(error, {
           module: 'sidepanel/useRepos',
           repoId,
           step: 'remapeamento',
@@ -134,7 +133,6 @@ export function useRepos() {
   const disconnect = useCallback(
     async (repoId: RepoId) => {
       await disconnectRepo(repoId);
-      await pruneRepoFromServers(repoId);
       await refresh();
     },
     [refresh],
