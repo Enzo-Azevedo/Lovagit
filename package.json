@@ -1,6 +1,6 @@
 {
   "name": "lovagit",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "description": "Extensao de navegador: um chat de IA isolado por repositorio do GitHub",
   "type": "module",
@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:ci": "vitest run --reporter=default --reporter=json --outputFile=.vitest-report.json && node scripts/check-test-floor.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

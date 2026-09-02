@@ -41,6 +41,29 @@ export function normalizeRepoPath(path: string): string {
   return trimmed;
 }
 
+/**
+ * Mensagem de commit derivada das alteracoes, para quando o modelo prepara
+ * arquivos mas nao propoe uma mensagem. Serve como ponto de partida editavel —
+ * melhor do que deixar uma string interna da interface virar historico do git.
+ */
+export function defaultCommitMessage(changes: PendingFileChange[]): string {
+  const caminhos = changes.map((change) => normalizeRepoPath(change.path));
+  const acoes = new Set(changes.map((change) => change.action));
+  const verbo =
+    acoes.size === 1 && acoes.has('create')
+      ? 'adiciona'
+      : acoes.size === 1 && acoes.has('delete')
+        ? 'remove'
+        : 'atualiza';
+
+  if (caminhos.length === 1) return `chore: ${verbo} ${caminhos[0]}`;
+  return [
+    `chore: ${verbo} ${caminhos.length} arquivos`,
+    '',
+    ...caminhos.map((caminho) => `- ${caminho}`),
+  ].join('\n');
+}
+
 export interface ApplyResult {
   checkpoint: Checkpoint;
   commitUrl: string;
