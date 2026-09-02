@@ -5,6 +5,7 @@ import { createScope } from '../lib/agent/isolation';
 import { applyChangesToMap } from '../lib/github/mapper';
 import { getServersForRepo } from '../lib/mcp/registry';
 import { captureError } from '../lib/telemetry/reporter';
+import { RETRY_DELAY_SECONDS, shouldAutoRetry } from '../lib/agent/retry';
 import { applyChanges, defaultCommitMessage, restoreCheckpoint } from '../lib/github/writer';
 import {
   addCheckpoint,
@@ -43,6 +44,10 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   const [pending, setPending] = useState<PendingFileChange[]>([]);
   const [pendingMessage, setPendingMessage] = useState('');
   const [streaming, setStreaming] = useState('');
+  /** Raciocinio do turno em andamento — some assim que a resposta chega. */
+  const [reasoning, setReasoning] = useState('');
+  /** Reenvio automatico agendado: texto original e segundos restantes. */
+  const [retry, setRetry] = useState<{ text: string; secondsLeft: number } | null>(null);
   const [status, setStatus] = useState('');
   const [running, setRunning] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -63,6 +68,8 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     setPending([]);
     setPendingMessage('');
     setStreaming('');
+    setReasoning('');
+    setRetry(null);
     setError(null);
     void (async () => {
       const [chat, cps, pendingSet] = await Promise.all([
@@ -107,117 +114,168 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     [repo.id],
   );
 
-  const send = useCallback(async () => {
+  const runTurn = useCallback(
+    async (text: string, reenvioAutomatico = false) => {
+      if (!text || running) return;
+      if (!activeProvider) {
+        setError('Nenhuma IA conectada. Configure um provedor nas configuracoes.');
+        return;
+      }
+
+      const map = await getRepoMap(repo.id);
+      if (!map) {
+        setError('Este repositorio ainda nao foi mapeado. Use "Remapear".');
+        return;
+      }
+
+      setError(null);
+      setReasoning('');
+      setRunning(true);
+      setStreaming('');
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      const collectedChanges = new Map<string, PendingFileChange>();
+      const producedMessages: ChatMessage[] = [];
+      let history: ChatMessage[] = [];
+      // Reenviar depois de um commit repetiria trabalho ja gravado no repositorio.
+      let commitouNesteTurno = false;
+
+      try {
+        const provider = await createProvider(activeProvider);
+        const scope = createScope(repo);
+        history = await getChat(repo.id);
+        // So os servidores MCP habilitados para ESTE repositorio.
+        const mcpServers = await getServersForRepo(repo.id);
+
+        const onEvent = (event: AgentEvent) => {
+          switch (event.type) {
+            case 'status':
+              setStatus(event.text);
+              break;
+            case 'assistant-delta':
+              setStreaming((prev) => prev + event.text);
+              break;
+            case 'reasoning-delta':
+              setReasoning((prev) => prev + event.text);
+              break;
+            case 'message':
+              setStreaming('');
+              setReasoning('');
+              producedMessages.push(event.message);
+              setMessages((prev) => [...prev, event.message]);
+              break;
+            case 'tool-start':
+              setStatus(`${TOOL_LABEL[event.call.name] ?? event.call.name} ${String(event.call.input.path ?? event.call.input.query ?? '')}`);
+              break;
+            case 'pending-changed':
+              for (const change of event.changes) collectedChanges.set(change.path, change);
+              setPending(event.changes);
+              break;
+            case 'awaiting-approval': {
+              // Sem mensagem proposta pelo modelo, deriva uma das proprias
+              // alteracoes — e ela fica editavel antes de virar historico.
+              const proposta = event.commitMessage ?? defaultCommitMessage(event.changes);
+              setPendingMessage(proposta);
+              void savePendingChanges({
+                repoId: repo.id,
+                changes: event.changes,
+                message: proposta,
+                createdAt: Date.now(),
+              });
+              break;
+            }
+            case 'committed':
+              commitouNesteTurno = true;
+              void persistCheckpoint(event.result.checkpoint, [...collectedChanges.values()]);
+              collectedChanges.clear();
+              break;
+            case 'error':
+              setError(event.error);
+              break;
+            case 'done':
+              setStatus('');
+              break;
+          }
+        };
+
+        await runAgent({
+          scope,
+          map,
+          history,
+          userText: text,
+          provider,
+          autoApply: settings.autoApplyChanges,
+          connectedRepoIds: settings.connectedRepoIds,
+          mcpServers,
+          signal: controller.signal,
+          onEvent,
+        });
+      } catch (caught) {
+        const cancelado = (caught as Error)?.name === 'AbortError';
+        if (!cancelado) {
+          setError(caught instanceof Error ? caught.message : String(caught));
+        }
+        void captureError(caught, {
+          module: 'sidepanel/ChatView',
+          repoId: repo.id,
+          step: 'conversa',
+          providerKind: activeProvider.kind,
+        });
+
+        if (
+          shouldAutoRetry({
+            enabled: settings.autoRetryOnFailure,
+            error: caught,
+            alreadyRetried: reenvioAutomatico,
+            committed: commitouNesteTurno,
+          })
+        ) {
+          setRetry({ text, secondsLeft: RETRY_DELAY_SECONDS });
+        }
+      } finally {
+        // Cancelar ou falhar no meio nao pode apagar o que ja foi dito no chat.
+        if (producedMessages.length > 0) {
+          await saveChat(repo.id, [...history, ...producedMessages]);
+        }
+        setRunning(false);
+        setStatus('');
+        setStreaming('');
+        setReasoning('');
+        abortRef.current = null;
+      }
+    },
+    [activeProvider, persistCheckpoint, repo, running, settings],
+  );
+
+  // `runTurn` muda de identidade a cada render; a contagem do reenvio nao pode
+  // reiniciar por causa disso.
+  const runTurnRef = useRef(runTurn);
+  useEffect(() => {
+    runTurnRef.current = runTurn;
+  });
+
+  useEffect(() => {
+    if (!retry) return;
+    if (retry.secondsLeft <= 0) {
+      setRetry(null);
+      void runTurnRef.current(retry.text, true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setRetry((atual) => (atual ? { ...atual, secondsLeft: atual.secondsLeft - 1 } : null));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [retry]);
+
+  const send = useCallback(() => {
     const text = input.trim();
     if (!text || running) return;
-    if (!activeProvider) {
-      setError('Nenhuma IA conectada. Configure um provedor nas configuracoes.');
-      return;
-    }
-
-    const map = await getRepoMap(repo.id);
-    if (!map) {
-      setError('Este repositorio ainda nao foi mapeado. Use "Remapear".');
-      return;
-    }
-
+    // Mandar na mao cancela um reenvio agendado: quem manda e o usuario.
+    setRetry(null);
     setInput('');
-    setError(null);
-    setRunning(true);
-    setStreaming('');
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const collectedChanges = new Map<string, PendingFileChange>();
-    const producedMessages: ChatMessage[] = [];
-    let history: ChatMessage[] = [];
-
-    try {
-      const provider = await createProvider(activeProvider);
-      const scope = createScope(repo);
-      history = await getChat(repo.id);
-      // So os servidores MCP habilitados para ESTE repositorio.
-      const mcpServers = await getServersForRepo(repo.id);
-
-      const onEvent = (event: AgentEvent) => {
-        switch (event.type) {
-          case 'status':
-            setStatus(event.text);
-            break;
-          case 'assistant-delta':
-            setStreaming((prev) => prev + event.text);
-            break;
-          case 'message':
-            setStreaming('');
-            producedMessages.push(event.message);
-            setMessages((prev) => [...prev, event.message]);
-            break;
-          case 'tool-start':
-            setStatus(`${TOOL_LABEL[event.call.name] ?? event.call.name} ${String(event.call.input.path ?? event.call.input.query ?? '')}`);
-            break;
-          case 'pending-changed':
-            for (const change of event.changes) collectedChanges.set(change.path, change);
-            setPending(event.changes);
-            break;
-          case 'awaiting-approval': {
-            // Sem mensagem proposta pelo modelo, deriva uma das proprias
-            // alteracoes — e ela fica editavel antes de virar historico.
-            const proposta = event.commitMessage ?? defaultCommitMessage(event.changes);
-            setPendingMessage(proposta);
-            void savePendingChanges({
-              repoId: repo.id,
-              changes: event.changes,
-              message: proposta,
-              createdAt: Date.now(),
-            });
-            break;
-          }
-          case 'committed':
-            void persistCheckpoint(event.result.checkpoint, [...collectedChanges.values()]);
-            collectedChanges.clear();
-            break;
-          case 'error':
-            setError(event.error);
-            break;
-          case 'done':
-            setStatus('');
-            break;
-        }
-      };
-
-      await runAgent({
-        scope,
-        map,
-        history,
-        userText: text,
-        provider,
-        autoApply: settings.autoApplyChanges,
-        connectedRepoIds: settings.connectedRepoIds,
-        mcpServers,
-        signal: controller.signal,
-        onEvent,
-      });
-    } catch (caught) {
-      if ((caught as Error)?.name !== 'AbortError') {
-        setError(caught instanceof Error ? caught.message : String(caught));
-      }
-      void captureError(caught, {
-        module: 'sidepanel/ChatView',
-        repoId: repo.id,
-        step: 'conversa',
-        providerKind: activeProvider.kind,
-      });
-    } finally {
-      // Cancelar ou falhar no meio nao pode apagar o que ja foi dito no chat.
-      if (producedMessages.length > 0) {
-        await saveChat(repo.id, [...history, ...producedMessages]);
-      }
-      setRunning(false);
-      setStatus('');
-      setStreaming('');
-      abortRef.current = null;
-    }
-  }, [activeProvider, input, persistCheckpoint, repo, running, settings]);
+    void runTurn(text);
+  }, [input, runTurn, running]);
 
   const approvePending = useCallback(async () => {
     if (pending.length === 0) return;
@@ -333,9 +391,25 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           );
         })}
 
+        {/* Fase de pensamento: sem isso a tela fica parada em modelo lento, e e
+            justamente nesse silencio que o intermediario derruba a conexao. */}
+        {reasoning && !streaming && (
+          <div className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-lg border border-ink-700 bg-ink-900/60 p-2 font-mono text-[10px] leading-relaxed text-ink-400">
+            {reasoning}
+          </div>
+        )}
         {streaming && <RichText text={streaming} />}
         {running && <Spinner label={status || 'Trabalhando...'} />}
         {error && <ErrorNote>{error}</ErrorNote>}
+
+        {retry && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-ink-700 bg-ink-900 p-2 text-xs text-ink-300">
+            <span>Falha passageira. Reenviando em {retry.secondsLeft}s...</span>
+            <Button variant="ghost" onClick={() => setRetry(null)}>
+              Cancelar
+            </Button>
+          </div>
+        )}
 
         {pending.length > 0 && (
           <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
@@ -454,7 +528,13 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
               Limpar
             </Button>
             {running ? (
-              <Button variant="danger" onClick={() => abortRef.current?.abort()}>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setRetry(null);
+                  abortRef.current?.abort();
+                }}
+              >
                 Parar
               </Button>
             ) : (

@@ -1,6 +1,6 @@
 {
   "name": "lovagit",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "description": "Extensao de navegador: um chat de IA isolado por repositorio do GitHub",
   "type": "module",

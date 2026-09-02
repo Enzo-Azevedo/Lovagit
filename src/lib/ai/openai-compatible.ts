@@ -64,6 +64,31 @@ interface StreamAccumulator {
   error?: { message: string; code?: number | string };
 }
 
+export interface StreamDelta {
+  content?: string | null;
+  /**
+   * Modelos de raciocinio mandam a linha de pensamento aqui, e o nome do campo
+   * varia por provedor. Ler so `content` faz a resposta chegar vazia quando o
+   * modelo coloca tudo no raciocinio — e ai o turno termina sem nada na tela.
+   */
+  reasoning?: string | null;
+  reasoning_content?: string | null;
+  reasoning_text?: string | null;
+  /**
+   * O OpenRouter entrega o raciocinio tambem nesse formato, em array, um item
+   * por bloco. Blocos cifrados (`reasoning.encrypted`) trazem `data` em vez de
+   * texto e nao rendem nada legivel — ficam de fora.
+   */
+  reasoning_details?:
+    | { type?: string; text?: string | null; summary?: string | null }[]
+    | null;
+  tool_calls?: {
+    index: number;
+    id?: string;
+    function?: { name?: string; arguments?: string };
+  }[];
+}
+
 interface StreamChunk {
   /**
    * Agregadores como o OpenRouter respondem HTTP 200 e reportam a falha DENTRO
@@ -72,31 +97,30 @@ interface StreamChunk {
    * falha possivel, porque nao aparece erro nenhum para o usuario.
    */
   error?: { message?: string; code?: number | string };
-  choices?: {
-    delta?: {
-      content?: string | null;
-      /**
-       * Modelos de raciocinio mandam a linha de pensamento aqui, e o nome do
-       * campo varia por provedor. Ler so `content` faz a resposta chegar vazia
-       * quando o modelo coloca tudo no raciocinio — e ai o turno termina sem
-       * nada na tela.
-       */
-      reasoning?: string | null;
-      reasoning_content?: string | null;
-      reasoning_text?: string | null;
-      tool_calls?: {
-        index: number;
-        id?: string;
-        function?: { name?: string; arguments?: string };
-      }[];
-    };
-    finish_reason?: string | null;
-  }[];
+  choices?: { delta?: StreamDelta; finish_reason?: string | null }[];
   usage?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
+/**
+ * Le o raciocinio do delta, seja qual for o campo que o provedor usou. Sem
+ * isso, um modelo que so fala pelo array `reasoning_details` chega aqui como
+ * turno mudo.
+ */
+export function reasoningFromDelta(delta: StreamDelta | undefined): string {
+  const direto = delta?.reasoning ?? delta?.reasoning_content ?? delta?.reasoning_text;
+  if (direto) return direto;
+  return (delta?.reasoning_details ?? [])
+    .map((bloco) => bloco?.text ?? bloco?.summary ?? '')
+    .join('');
+}
+
 /** Aplica um chunk SSE ao acumulador. Exportado para teste. */
-export function applyChunk(acc: StreamAccumulator, chunk: StreamChunk, onText?: (t: string) => void): void {
+export function applyChunk(
+  acc: StreamAccumulator,
+  chunk: StreamChunk,
+  onText?: (t: string) => void,
+  onReasoning?: (t: string) => void,
+): void {
   if (chunk.error) {
     acc.error = {
       message: chunk.error.message ?? 'o provedor reportou um erro sem mensagem',
@@ -108,11 +132,11 @@ export function applyChunk(acc: StreamAccumulator, chunk: StreamChunk, onText?: 
     acc.text += choice.delta.content;
     onText?.(choice.delta.content);
   }
-  const raciocinio =
-    choice?.delta?.reasoning ??
-    choice?.delta?.reasoning_content ??
-    choice?.delta?.reasoning_text;
-  if (raciocinio) acc.reasoning += raciocinio;
+  const raciocinio = reasoningFromDelta(choice?.delta);
+  if (raciocinio) {
+    acc.reasoning += raciocinio;
+    onReasoning?.(raciocinio);
+  }
   for (const delta of choice?.delta?.tool_calls ?? []) {
     const current = acc.toolCalls.get(delta.index) ?? { id: '', name: '', args: '' };
     if (delta.id) current.id = delta.id;
@@ -177,6 +201,20 @@ export interface OpenAICompatibleOptions {
   extraHeaders?: Record<string, string>;
 }
 
+/**
+ * O parametro `reasoning` e do OpenRouter — a API da OpenAI recusa argumento
+ * desconhecido com 400, entao ele so pode sair quando o destino e o OpenRouter
+ * mesmo. Um gateway que apenas repasse para la nao e reconhecido aqui; nesse
+ * caso vale o comportamento antigo, sem o parametro.
+ */
+export function acceptsReasoningParam(endpoint: string): boolean {
+  try {
+    return /(^|\.)openrouter\.ai$/i.test(new URL(endpoint).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function normalizeBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, '');
   return trimmed.endsWith('/chat/completions') ? trimmed : `${trimmed}/chat/completions`;
@@ -191,51 +229,69 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
       const token = await options.getAuthToken();
       const endpoint = normalizeBaseUrl(options.baseUrl);
 
-      let response: Response;
-      try {
-        response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          ...options.extraHeaders,
-        },
-        signal: request.signal,
-        body: JSON.stringify({
-          model: options.model,
-          max_tokens: options.maxTokens,
-          ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
-          stream: true,
-          stream_options: { include_usage: true },
-          messages: toOpenAIMessages(request),
-          ...(request.tools.length > 0
-            ? {
-                tools: request.tools.map((tool) => ({
-                  type: 'function',
-                  function: {
-                    name: tool.name,
-                    description: tool.description,
-                    parameters: tool.inputSchema,
-                  },
-                })),
-              }
-            : {}),
-          }),
-        });
-      } catch (error) {
-        // Numa extensao, a causa mais comum de a primeira requisicao nem sair e
-        // a origem nao ter permissao de host — vale dizer isso em vez de
-        // repassar o "Failed to fetch" seco.
-        throw new ProviderError(
-          `Nao foi possivel alcancar ${endpoint}. Verifique a conexao e se a extensao tem ` +
-            'permissao para essa origem (a permissao e pedida ao salvar a chave nas configuracoes).',
-          'network',
-          error,
-        );
+      const enviar = async (pedirRaciocinio: boolean): Promise<Response> => {
+        try {
+          return await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+              ...options.extraHeaders,
+            },
+            signal: request.signal,
+            body: JSON.stringify({
+              model: options.model,
+              max_tokens: options.maxTokens,
+              ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
+              stream: true,
+              stream_options: { include_usage: true },
+              // Pedir o raciocinio mantem o stream com trafego durante a fase
+              // de pensamento, que e quando o intermediario costuma desistir de
+              // esperar o modelo. `enabled: true` e a unica forma segura:
+              // `enabled: false` e recusado por modelos em que o raciocinio e
+              // obrigatorio, e mandar `reasoning` junto de `reasoning_effort`
+              // tambem e recusado.
+              ...(pedirRaciocinio ? { reasoning: { enabled: true } } : {}),
+              messages: toOpenAIMessages(request),
+              ...(request.tools.length > 0
+                ? {
+                    tools: request.tools.map((tool) => ({
+                      type: 'function',
+                      function: {
+                        name: tool.name,
+                        description: tool.description,
+                        parameters: tool.inputSchema,
+                      },
+                    })),
+                  }
+                : {}),
+            }),
+          });
+        } catch (error) {
+          // Numa extensao, a causa mais comum de a primeira requisicao nem sair e
+          // a origem nao ter permissao de host — vale dizer isso em vez de
+          // repassar o "Failed to fetch" seco.
+          throw new ProviderError(
+            `Nao foi possivel alcancar ${endpoint}. Verifique a conexao e se a extensao tem ` +
+              'permissao para essa origem (a permissao e pedida ao salvar a chave nas configuracoes).',
+            'network',
+            error,
+          );
+        }
+      };
+
+      const pediuRaciocinio = acceptsReasoningParam(endpoint);
+      let response = await enviar(pediuRaciocinio);
+      let detail = response.ok ? '' : await response.text().catch(() => '');
+
+      // Modelo que nao aceita o parametro de raciocinio: refaz a chamada sem
+      // ele. Um extra nosso nunca pode ser o motivo de a conversa nao sair.
+      if (pediuRaciocinio && response.status === 400 && /reasoning/i.test(detail)) {
+        response = await enviar(false);
+        detail = response.ok ? '' : await response.text().catch(() => '');
       }
 
       if (!response.ok || !response.body) {
-        const detail = await response.text().catch(() => '');
         throw new ProviderError(
           `${options.label} respondeu ${response.status}: ${detail.slice(0, 300) || response.statusText}`,
           providerKindForStatus(response.status),
@@ -266,7 +322,12 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
               const payload = line.slice(5).trim();
               if (!payload || payload === '[DONE]') continue;
               try {
-                applyChunk(acc, JSON.parse(payload) as StreamChunk, request.onText);
+                applyChunk(
+                  acc,
+                  JSON.parse(payload) as StreamChunk,
+                  request.onText,
+                  request.onReasoning,
+                );
               } catch {
                 // Chunk malformado: ignora em vez de derrubar a conversa inteira.
               }

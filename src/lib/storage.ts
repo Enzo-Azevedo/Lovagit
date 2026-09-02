@@ -47,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   activeProviderId: null,
   connectedRepoIds: [],
   autoApplyChanges: true,
+  autoRetryOnFailure: false,
   githubUser: null,
 };
 

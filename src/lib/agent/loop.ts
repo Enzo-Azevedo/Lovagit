@@ -14,6 +14,8 @@ const HISTORY_WINDOW = 60;
 export type AgentEvent =
   | { type: 'status'; text: string }
   | { type: 'assistant-delta'; text: string }
+  /** Raciocinio chegando token a token, antes de o modelo produzir a resposta. */
+  | { type: 'reasoning-delta'; text: string }
   | { type: 'message'; message: ChatMessage }
   | { type: 'tool-start'; call: ToolCall }
   | { type: 'pending-changed'; changes: PendingFileChange[] }
@@ -150,6 +152,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       tools,
       signal: options.signal,
       onText: (delta) => onEvent({ type: 'assistant-delta', text: delta }),
+      onReasoning: (delta) => onEvent({ type: 'reasoning-delta', text: delta }),
     });
 
     // Turno que nao produz texto nem chamada de ferramenta some da tela: a UI

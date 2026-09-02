@@ -135,6 +135,12 @@ export interface Settings {
   connectedRepoIds: RepoId[];
   /** Politica de escrita: sempre cria backup antes de commitar na branch alvo. */
   autoApplyChanges: boolean;
+  /**
+   * Reenvia a mensagem sozinho, uma unica vez, quando o turno cai por falha
+   * passageira do provedor. Desligado por padrao: reenviar gasta tokens e nem
+   * toda falha melhora na segunda tentativa.
+   */
+  autoRetryOnFailure: boolean;
   githubUser?: { login: string; avatarUrl: string } | null;
 }
 

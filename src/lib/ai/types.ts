@@ -28,6 +28,12 @@ export interface CompletionRequest {
   signal?: AbortSignal;
   /** Streaming incremental de texto para a UI. */
   onText?: (delta: string) => void;
+  /**
+   * Streaming incremental do raciocinio. Serve para a UI mostrar que o modelo
+   * esta trabalhando durante a fase de pensamento, que em modelo lento e o
+   * trecho em que a conversa parece travada.
+   */
+  onReasoning?: (delta: string) => void;
 }
 
 export interface CompletionResponse {

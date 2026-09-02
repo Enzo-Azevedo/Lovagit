@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getAuthenticatedUser, type RepoSummary } from '../lib/github/client';
 import { buildRepoMap } from '../lib/github/mapper';
 import {
+  DEFAULT_SETTINGS,
   disconnectRepo,
   getRepoRef,
   getSettings,
@@ -27,13 +28,9 @@ export interface ReposState {
 export function useRepos() {
   const [state, setState] = useState<ReposState>({
     loading: true,
-    settings: {
-      providers: [],
-      activeProviderId: null,
-      connectedRepoIds: [],
-      autoApplyChanges: true,
-      githubUser: null,
-    },
+    // Reusa o padrao unico: manter uma copia aqui ja fez este arquivo ficar
+    // para tras quando um campo novo entrou em Settings.
+    settings: DEFAULT_SETTINGS,
     repos: [],
     hasToken: false,
     mappingRepoId: null,

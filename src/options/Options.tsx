@@ -471,6 +471,30 @@ export function Options() {
         </label>
       </section>
 
+      <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
+        <h2 className="text-sm text-ink-200">4. Falha passageira do provedor</h2>
+        <label className="flex items-start gap-2 text-xs text-ink-200">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={settings.autoRetryOnFailure}
+            onChange={(event) =>
+              void saveSettings({ autoRetryOnFailure: event.target.checked }).then(reload)
+            }
+          />
+          <span>
+            Reenviar a mensagem automaticamente apos 5 segundos
+            <span className="mt-1 block text-[11px] text-ink-400">
+              Vale so para falha passageira — queda de conexao, 429 e erro 5xx do provedor, como o
+              "Upstream idle timeout exceeded" do OpenRouter. Chave invalida, modelo inexistente e
+              erro da extensao nao sao reenviados, porque a segunda tentativa daria no mesmo. O
+              reenvio acontece uma vez por mensagem, da para cancelar durante a contagem, e nao
+              acontece se o turno ja tiver commitado alguma coisa.
+            </span>
+          </span>
+        </label>
+      </section>
+
       <McpSection />
 
       <TelemetrySection />
