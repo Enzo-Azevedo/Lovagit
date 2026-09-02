@@ -384,9 +384,21 @@ src/
 | `npm run build` | typecheck + build de produção em `dist/` |
 | `npm run dev` | build em watch (recarregue a extensão no Chrome) |
 | `npm test` | suíte Vitest (isolamento, mapeamento, escrita, diff, streaming, relato de erros, MCP) |
+| `npm run test:ci` | a suíte + o piso de `.github/test-floor.json` — o que o CI roda |
 | `npm run typecheck` | só o `tsc --noEmit` |
 
-O workflow `.github/workflows/build.yml` roda exatamente `npm test` e
+### Piso de testes
+
+`.github/test-floor.json` guarda a contagem mínima de testes e de arquivos de
+teste. O CI reprova se a suíte encolher. Adicionar testes não exige mexer no
+arquivo; **só reduzir exige** — e aí a redução vira uma decisão explícita,
+visível no diff.
+
+Isso existe por um motivo concreto: um agente pediu para "remover complexidade
+desnecessária", apagou 8 arquivos de teste, e o CI passou — os 9 que sobraram
+rodaram e passaram. Apagar teste é a forma mais silenciosa de ficar verde.
+
+O workflow `.github/workflows/build.yml` roda exatamente `npm run test:ci` e
 `npm run build` — o que reprova localmente reprova no CI, e vice-versa. Ele ainda
 confere que todo caminho citado no `manifest.json` existe no `dist/`, porque um
 manifest apontando para arquivo inexistente só falha na hora de carregar a

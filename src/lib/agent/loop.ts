@@ -17,7 +17,8 @@ export type AgentEvent =
   | { type: 'message'; message: ChatMessage }
   | { type: 'tool-start'; call: ToolCall }
   | { type: 'pending-changed'; changes: PendingFileChange[] }
-  | { type: 'awaiting-approval'; message: string; changes: PendingFileChange[] }
+  /** `commitMessage: null` = o modelo preparou arquivos sem propor mensagem. */
+  | { type: 'awaiting-approval'; commitMessage: string | null; changes: PendingFileChange[] }
   | { type: 'committed'; result: ApplyResult }
   | { type: 'done' }
   | { type: 'error'; error: string };
@@ -126,7 +127,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     },
     onAwaitingApproval: (message) => {
       awaitingApproval = message;
-      onEvent({ type: 'awaiting-approval', message, changes: [...pending.values()] });
+      onEvent({ type: 'awaiting-approval', commitMessage: message, changes: [...pending.values()] });
     },
   };
 
@@ -225,12 +226,11 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     if (awaitingApproval) break;
   }
 
+  // O modelo mexeu em arquivos e encerrou sem chamar commit_changes. Sem
+  // mensagem proposta: quem decide o texto do commit e o usuario, nao uma
+  // string interna desta funcao.
   if (committed === null && awaitingApproval === null && pending.size > 0) {
-    onEvent({
-      type: 'awaiting-approval',
-      message: 'Alteracoes preparadas sem commit',
-      changes: [...pending.values()],
-    });
+    onEvent({ type: 'awaiting-approval', commitMessage: null, changes: [...pending.values()] });
   }
 
   onEvent({ type: 'done' });

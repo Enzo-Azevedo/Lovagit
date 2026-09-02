@@ -5,7 +5,7 @@ import { createScope } from '../lib/agent/isolation';
 import { applyChangesToMap } from '../lib/github/mapper';
 import { getServersForRepo } from '../lib/mcp/registry';
 import { captureError } from '../lib/telemetry/reporter';
-import { applyChanges, restoreCheckpoint } from '../lib/github/writer';
+import { applyChanges, defaultCommitMessage, restoreCheckpoint } from '../lib/github/writer';
 import {
   addCheckpoint,
   clearPendingChanges,
@@ -159,15 +159,19 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
             for (const change of event.changes) collectedChanges.set(change.path, change);
             setPending(event.changes);
             break;
-          case 'awaiting-approval':
-            setPendingMessage(event.message);
+          case 'awaiting-approval': {
+            // Sem mensagem proposta pelo modelo, deriva uma das proprias
+            // alteracoes — e ela fica editavel antes de virar historico.
+            const proposta = event.commitMessage ?? defaultCommitMessage(event.changes);
+            setPendingMessage(proposta);
             void savePendingChanges({
               repoId: repo.id,
               changes: event.changes,
-              message: event.message,
+              message: proposta,
               createdAt: Date.now(),
             });
             break;
+          }
           case 'committed':
             void persistCheckpoint(event.result.checkpoint, [...collectedChanges.values()]);
             collectedChanges.clear();
@@ -224,7 +228,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         repo,
         repo.defaultBranch,
         pending,
-        pendingMessage || 'chore: alteracoes via Lovagit',
+        pendingMessage.trim() || defaultCommitMessage(pending),
       );
       await persistCheckpoint(result.checkpoint, pending);
     } catch (caught) {
@@ -350,9 +354,24 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
                 </div>
               )}
             </div>
-            {pendingMessage && (
-              <p className="font-mono text-[11px] text-ink-400">{pendingMessage.split('\n')[0]}</p>
-            )}
+            <label className="block">
+              <span className="mb-1 block text-[10px] text-ink-400">Mensagem do commit</span>
+              <textarea
+                value={pendingMessage}
+                rows={2}
+                disabled={running || applying}
+                onChange={(event) => setPendingMessage(event.target.value)}
+                onBlur={() =>
+                  void savePendingChanges({
+                    repoId: repo.id,
+                    changes: pending,
+                    message: pendingMessage,
+                    createdAt: Date.now(),
+                  })
+                }
+                className="w-full resize-none rounded-md border border-ink-700 bg-ink-950 p-1.5 font-mono text-[11px] text-ink-200 outline-none focus:border-ink-600 disabled:opacity-60"
+              />
+            </label>
             {pending.map((change) => (
               <DiffView key={change.path} change={change} />
             ))}

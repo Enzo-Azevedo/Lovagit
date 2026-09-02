@@ -30,8 +30,11 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Testes
-        run: npm test
+      # `test:ci` roda a suite e depois compara com o piso em
+      # .github/test-floor.json. Apagar teste e a forma mais silenciosa de
+      # deixar o CI verde: sem esse passo, a suite pode encolher sem reprovar.
+      - name: Testes (com piso de cobertura)
+        run: npm run test:ci
 
       # `npm run build` roda `tsc --noEmit` antes do vite: um erro de tipo
       # reprova o build em vez de virar um bundle quebrado.

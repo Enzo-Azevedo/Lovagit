@@ -1,0 +1,10 @@
+{
+  "_comentario": [
+    "Piso minimo da suite de testes. O CI reprova se a contagem cair abaixo destes",
+    "numeros. Adicionar testes nao exige mexer aqui — so DIMINUIR exige, e ai a",
+    "reducao vira uma decisao explicita, revisavel no diff, em vez de passar",
+    "despercebida. Apagar teste e a forma mais silenciosa de deixar o CI verde."
+  ],
+  "minTests": 152,
+  "minTestFiles": 17
+}
