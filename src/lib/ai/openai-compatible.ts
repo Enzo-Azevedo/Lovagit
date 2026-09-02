@@ -113,13 +113,26 @@ export function applyChunk(acc: StreamAccumulator, chunk: StreamChunk, onText?: 
   }
 }
 
+/**
+ * Traduz o status HTTP do provedor em classificacao.
+ *
+ * 402 e 404 sao configuracao da conta, nao defeito: credito acabou, modelo nao
+ * existe, ou a politica de dados da conta nao casa com nenhum provedor (o caso
+ * dos modelos `:free` do OpenRouter). Tratar isso como bug enche o tracker de
+ * problema que so o dono da conta resolve.
+ */
+export function providerKindForStatus(status: number): ProviderErrorKind {
+  if (status === 401 || status === 403) return 'auth';
+  if (status === 402 || status === 404) return 'unavailable';
+  if (status === 408 || status === 429 || status >= 500) return 'rate-limit';
+  return 'http';
+}
+
 /** Mapeia o codigo do erro em banda para a classificacao do modulo de erros. */
 export function kindForStreamErrorCode(code: number | string | undefined): ProviderErrorKind {
   const numeric = typeof code === 'number' ? code : Number(code);
   if (!Number.isFinite(numeric)) return 'http';
-  if (numeric === 401 || numeric === 403) return 'auth';
-  if (numeric === 429 || (numeric >= 500 && numeric < 600)) return 'rate-limit';
-  return 'http';
+  return providerKindForStatus(numeric);
 }
 
 export function finalizeToolCalls(acc: StreamAccumulator): ToolCall[] {
@@ -209,11 +222,7 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
         const detail = await response.text().catch(() => '');
         throw new ProviderError(
           `${options.label} respondeu ${response.status}: ${detail.slice(0, 300) || response.statusText}`,
-          response.status === 401 || response.status === 403
-            ? 'auth'
-            : response.status === 429 || response.status >= 500
-              ? 'rate-limit'
-              : 'http',
+          providerKindForStatus(response.status),
         );
       }
 

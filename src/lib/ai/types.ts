@@ -55,6 +55,12 @@ export type ProviderErrorKind =
   | 'http'
   /** Conexao nao estabelecida ou interrompida — passageiro, nao e defeito. */
   | 'network'
+  /**
+   * Modelo ou endpoint indisponivel para esta conta: modelo inexistente, sem
+   * credito, ou politica de dados da conta bloqueando os provedores. E
+   * configuracao do usuario, nao defeito da extensao.
+   */
+  | 'unavailable'
   /** Resposta fora do contrato esperado — provavel defeito de integracao. */
   | 'protocol';
 

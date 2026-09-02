@@ -178,6 +178,16 @@ export function classifyError(error: unknown): Classification {
         reason: 'Cota do provedor de IA atingida.',
       };
     }
+    if (error.kind === 'unavailable') {
+      return {
+        origin: 'integration',
+        category: 'user-config',
+        name: 'ProviderError',
+        reason:
+          'Modelo ou endpoint indisponivel para esta conta (credito, modelo inexistente ' +
+          'ou politica de dados do provedor).',
+      };
+    }
     if (error.kind === 'network') {
       return {
         origin: 'integration',
