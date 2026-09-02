@@ -4,6 +4,7 @@ import { applyChunk, finalizeToolCalls, toOpenAIMessages } from '../ai/openai-co
 function emptyAcc() {
   return {
     text: '',
+    reasoning: '',
     toolCalls: new Map<number, { id: string; name: string; args: string }>(),
     finishReason: 'stop',
     usage: { inputTokens: 0, outputTokens: 0 },
@@ -46,6 +47,35 @@ describe('toOpenAIMessages', () => {
       ],
     });
     expect(messages[1].content).toBe('ERRO: sumiu');
+  });
+});
+
+describe('streaming SSE — raciocinio', () => {
+  // Modelos de raciocinio colocam a saida em campos que variam por provedor.
+  // Ler so `content` fazia a resposta chegar vazia e o turno terminar sem nada.
+  it.each(['reasoning', 'reasoning_content', 'reasoning_text'])(
+    'acumula o raciocinio vindo em delta.%s',
+    (campo) => {
+      const acc = emptyAcc();
+      applyChunk(acc, { choices: [{ delta: { [campo]: 'pensando...' } }] });
+      expect(acc.reasoning).toBe('pensando...');
+      expect(acc.text).toBe('');
+    },
+  );
+
+  it('nao envia raciocinio pelo callback de texto da interface', () => {
+    const acc = emptyAcc();
+    const deltas: string[] = [];
+    applyChunk(acc, { choices: [{ delta: { reasoning: 'pensando' } }] }, (t) => deltas.push(t));
+    expect(deltas).toEqual([]);
+  });
+
+  it('mantem raciocinio e conteudo separados', () => {
+    const acc = emptyAcc();
+    applyChunk(acc, { choices: [{ delta: { reasoning: 'penso' } }] });
+    applyChunk(acc, { choices: [{ delta: { content: 'respondo' } }] });
+    expect(acc.reasoning).toBe('penso');
+    expect(acc.text).toBe('respondo');
   });
 });
 

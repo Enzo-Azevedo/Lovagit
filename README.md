@@ -152,6 +152,18 @@ A correção é na sua conta, em <https://openrouter.ai/settings/privacy> — ou
 um modelo pago. A extensão trata esse caso como configuração, não como defeito:
 ele aparece no chat e não abre issue.
 
+### Modelos de raciocínio
+
+Modelos que separam raciocínio do conteúdo mandam a linha de pensamento em
+`delta.reasoning`, `reasoning_content` ou `reasoning_text` — o nome varia por
+provedor. A extensão lê os três. Se o modelo encerrar produzindo **apenas**
+raciocínio, ele é exibido no chat com um aviso, em vez de o turno terminar em
+branco.
+
+E se um turno não produzir texto nem chamada de ferramenta, isso é dito
+explicitamente. Conversa que para sozinha, sem resposta e sem erro, é o pior
+tipo de falha: parece que o programa travou.
+
 ### Quando o streaming cai
 
 Queda de conexão no meio de uma geração longa é comum com agregadores. O que a

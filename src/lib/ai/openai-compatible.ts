@@ -55,6 +55,8 @@ export function toOpenAIMessages(request: CompletionRequest): OpenAIMessage[] {
 
 interface StreamAccumulator {
   text: string;
+  /** Raciocinio do modelo, quando ele separa isso do conteudo. */
+  reasoning: string;
   toolCalls: Map<number, { id: string; name: string; args: string }>;
   finishReason: string;
   usage: { inputTokens: number; outputTokens: number };
@@ -73,6 +75,15 @@ interface StreamChunk {
   choices?: {
     delta?: {
       content?: string | null;
+      /**
+       * Modelos de raciocinio mandam a linha de pensamento aqui, e o nome do
+       * campo varia por provedor. Ler so `content` faz a resposta chegar vazia
+       * quando o modelo coloca tudo no raciocinio — e ai o turno termina sem
+       * nada na tela.
+       */
+      reasoning?: string | null;
+      reasoning_content?: string | null;
+      reasoning_text?: string | null;
       tool_calls?: {
         index: number;
         id?: string;
@@ -97,6 +108,11 @@ export function applyChunk(acc: StreamAccumulator, chunk: StreamChunk, onText?: 
     acc.text += choice.delta.content;
     onText?.(choice.delta.content);
   }
+  const raciocinio =
+    choice?.delta?.reasoning ??
+    choice?.delta?.reasoning_content ??
+    choice?.delta?.reasoning_text;
+  if (raciocinio) acc.reasoning += raciocinio;
   for (const delta of choice?.delta?.tool_calls ?? []) {
     const current = acc.toolCalls.get(delta.index) ?? { id: '', name: '', args: '' };
     if (delta.id) current.id = delta.id;
@@ -228,6 +244,7 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
 
       const acc: StreamAccumulator = {
         text: '',
+        reasoning: '',
         toolCalls: new Map(),
         finishReason: 'stop',
         usage: { inputTokens: 0, outputTokens: 0 },
@@ -289,6 +306,7 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
 
       return {
         text: acc.text,
+        reasoning: acc.reasoning || undefined,
         toolCalls: finalizeToolCalls(acc),
         stopReason: interrupted ? 'interrupted' : acc.finishReason,
         usage: acc.usage,

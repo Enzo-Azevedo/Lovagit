@@ -32,6 +32,8 @@ export interface CompletionRequest {
 
 export interface CompletionResponse {
   text: string;
+  /** Raciocinio separado do conteudo, quando o modelo devolve os dois. */
+  reasoning?: string;
   toolCalls: ToolCall[];
   stopReason: string;
   usage: { inputTokens: number; outputTokens: number };

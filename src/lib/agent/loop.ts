@@ -151,11 +151,20 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       onText: (delta) => onEvent({ type: 'assistant-delta', text: delta }),
     });
 
+    // Turno que nao produz texto nem chamada de ferramenta some da tela: a UI
+    // nao tem o que renderizar e o usuario ve a conversa parar sem explicacao.
+    const silentTurn = response.text === '' && response.toolCalls.length === 0;
+
     const assistantMessage: ChatMessage = {
       id: newId('msg'),
       repoId,
       role: 'assistant',
-      content: response.text,
+      // Modelo de raciocinio que nao produziu resposta final: mostrar o
+      // raciocinio e melhor do que mostrar nada.
+      content:
+        silentTurn && response.reasoning
+          ? `(o modelo nao produziu resposta final — abaixo o raciocinio que ele devolveu)\n\n${response.reasoning}`
+          : response.text,
       toolCalls: response.toolCalls.length > 0 ? response.toolCalls : undefined,
       createdAt: Date.now(),
     };
@@ -176,6 +185,18 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
         type: 'error',
         error:
           'A conexao caiu no meio da resposta. O que chegou esta acima; envie de novo para continuar.',
+      });
+      break;
+    }
+
+    if (silentTurn) {
+      onEvent({
+        type: 'error',
+        error: response.reasoning
+          ? 'O modelo devolveu apenas raciocinio, sem resposta final. Peca de novo, ou use ' +
+            'outro modelo — alguns modelos de raciocinio se perdem depois de varias rodadas de leitura.'
+          : 'O modelo encerrou o turno sem produzir resposta nem chamar ferramentas. Peca de novo, ' +
+            'seja mais especifico, ou tente outro modelo.',
       });
       break;
     }
