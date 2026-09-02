@@ -138,6 +138,20 @@ que a chave está errada na primeira mensagem do chat é o pior momento possíve
 com **PKCE** via `chrome.identity.launchWebAuthFlow`, sem `client_secret` embutido
 (num bundle de navegador, segredo nenhum é segredo).
 
+### Modelos `:free` do OpenRouter
+
+Modelos com sufixo `:free` roteiam por provedores que podem treinar com o que
+você envia, e a conta precisa liberar isso explicitamente. Sem a liberação,
+nenhum endpoint casa com a política da conta e a resposta é:
+
+```
+404 No endpoints available matching your guardrail restrictions and data policy
+```
+
+A correção é na sua conta, em <https://openrouter.ai/settings/privacy> — ou use
+um modelo pago. A extensão trata esse caso como configuração, não como defeito:
+ele aparece no chat e não abre issue.
+
 ### Quando o streaming cai
 
 Queda de conexão no meio de uma geração longa é comum com agregadores. O que a
@@ -196,6 +210,7 @@ Só defeito. A classificação decide:
 | Conexão com o provedor caiu (inclusive no meio do streaming) | transitório | não | — |
 | Servidor MCP fora do ar ou sessão expirada | transitório | não | — |
 | Servidor MCP exigindo autorização | configuração | não | — |
+| Modelo indisponível para a conta (sem crédito, modelo inexistente, política de dados) | configuração | não | — |
 | Servidor MCP fora do protocolo | bug / integração | sim | `lovagit:erro-integracao` |
 | Firewall barrou mensagem citando outro repo | esperado | não | — |
 | Cancelamento pelo usuário | ignorado | não | — |

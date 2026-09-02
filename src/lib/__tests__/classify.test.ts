@@ -71,6 +71,14 @@ describe('classifyError — o que NAO vira issue', () => {
     expect(classifyError(new ProviderError('sem chave', 'auth')).category).toBe('user-config');
   });
 
+  // Regressao da issue #8: a politica de dados da conta bloqueava os provedores
+  // do modelo `:free` e o 404 resultante virou issue. Quem resolve isso e o
+  // dono da conta, nao o codigo.
+  it('trata modelo/endpoint indisponivel para a conta como configuracao', () => {
+    const erro = new ProviderError('No endpoints available matching your data policy', 'unavailable');
+    expect(classifyError(erro).category).toBe('user-config');
+  });
+
   it('trata bloqueio do firewall por texto do usuario como esperado, nao defeito', () => {
     const blocked = new ContextIsolationError('citou outro repo', 'foreign-repo-user-input');
     expect(classifyError(blocked).category).toBe('user-config');

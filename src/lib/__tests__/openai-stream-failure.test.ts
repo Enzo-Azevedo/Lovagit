@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createOpenAICompatibleProvider } from '../ai/openai-compatible';
+import {
+  createOpenAICompatibleProvider,
+  kindForStreamErrorCode,
+  providerKindForStatus,
+} from '../ai/openai-compatible';
 import { ProviderError } from '../ai/types';
 
 /**
@@ -187,5 +191,32 @@ describe('preservacao do texto parcial', () => {
 
     expect(erro).toBeInstanceOf(ProviderError);
     expect(erro.kind).toBe('network');
+  });
+});
+
+describe('providerKindForStatus', () => {
+  it('separa o que e da conta do que e defeito nosso', () => {
+    const casos: [number, string][] = [
+      [401, 'auth'],
+      [403, 'auth'],
+      // Sem credito e modelo/endpoint inexistente: quem resolve e o dono da conta.
+      [402, 'unavailable'],
+      [404, 'unavailable'],
+      [408, 'rate-limit'],
+      [429, 'rate-limit'],
+      [502, 'rate-limit'],
+      // 400 e 422 sao payload que NOS montamos — esses sim sao defeito.
+      [400, 'http'],
+      [422, 'http'],
+    ];
+    for (const [status, esperado] of casos) {
+      expect(providerKindForStatus(status), `status ${status}`).toBe(esperado);
+    }
+  });
+
+  it('erro em banda usa o mesmo mapeamento do status HTTP', () => {
+    expect(kindForStreamErrorCode(404)).toBe('unavailable');
+    expect(kindForStreamErrorCode('404')).toBe('unavailable');
+    expect(kindForStreamErrorCode(undefined)).toBe('http');
   });
 });
