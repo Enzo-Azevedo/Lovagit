@@ -155,10 +155,21 @@ ele aparece no chat e não abre issue.
 ### Modelos de raciocínio
 
 Modelos que separam raciocínio do conteúdo mandam a linha de pensamento em
-`delta.reasoning`, `reasoning_content` ou `reasoning_text` — o nome varia por
-provedor. A extensão lê os três. Se o modelo encerrar produzindo **apenas**
-raciocínio, ele é exibido no chat com um aviso, em vez de o turno terminar em
-branco.
+`delta.reasoning`, `reasoning_content`, `reasoning_text` ou no array
+`reasoning_details` — o nome varia por provedor. A extensão lê os quatro. Se o
+modelo encerrar produzindo **apenas** raciocínio, ele é exibido no chat com um
+aviso, em vez de o turno terminar em branco.
+
+O raciocínio aparece **enquanto chega**, num bloco discreto acima da resposta.
+Não é enfeite: em modelo lento, a fase de pensamento é justamente o trecho em
+que a tela fica parada e parece travada.
+
+No OpenRouter a extensão pede o raciocínio explicitamente (`reasoning:
+{ enabled: true }`), porque um stream com tráfego é menos suscetível ao
+`Upstream idle timeout exceeded` — ver abaixo. O parâmetro é específico do
+OpenRouter e só sai quando o endpoint é o dele; a API da OpenAI recusa argumento
+desconhecido com `400`. Se ainda assim um modelo recusar o campo, a chamada é
+refeita sem ele: um extra nosso nunca pode ser o motivo de a conversa não sair.
 
 E se um turno não produzir texto nem chamada de ferramenta, isso é dito
 explicitamente. Conversa que para sozinha, sem resposta e sem erro, é o pior
@@ -179,6 +190,36 @@ extensão faz:
   Sem tratar isso, o turno termina vazio e parece sucesso — o pior modo de falha,
   porque nada aparece para o usuário.
 - Nenhuma dessas situações abre issue: são falhas passageiras, não defeitos.
+
+#### `Upstream idle timeout exceeded` (504)
+
+Esse erro **não vem da extensão**. É o OpenRouter reportando que *o provedor
+dele* ficou tempo demais em silêncio: a requisição foi aceita, o stream abriu, e
+o relógio que estourou fica entre o OpenRouter e quem hospeda o modelo. Aparece
+com modelos lentos — a família Nemotron Ultra Free e o MiMo v2.5 Pro são os
+casos mais relatados — e nenhum parâmetro do cliente estende esse tempo limite.
+
+O que dá para fazer do lado de cá é pedir o raciocínio, para o stream não ficar
+mudo durante o pensamento (acima), e reenviar a mensagem (abaixo). Se o modelo
+for lento demais, a solução real é trocar de modelo.
+
+### Reenvio automático (desligado por padrão)
+
+Em **Configurações → Falha passageira do provedor**, a extensão pode reenviar a
+mensagem sozinha 5 segundos depois de uma falha. Três barreiras, cada uma por um
+motivo diferente:
+
+- **Só falha passageira.** Queda de conexão, `429` e `5xx` do provedor. Chave
+  inválida, modelo inexistente e erro da própria extensão não são reenviados,
+  porque a segunda tentativa daria exatamente no mesmo.
+- **Uma vez por mensagem.** Sem isso, um provedor com problema persistente vira
+  laço infinito queimando tokens.
+- **Nunca depois de um commit.** Repetir o turno repetiria trabalho que já está
+  gravado no repositório.
+
+Durante a contagem aparece um botão para cancelar, e mandar qualquer mensagem na
+mão também cancela. Fica desligado por padrão porque reenviar gasta tokens, e
+essa decisão é sua.
 
 > **Anthropic e OpenAI não entram aqui.** A Anthropic restringe o OAuth ao Claude
 > Code e ao claude.ai e [não registra `client_id` para terceiros](https://claude.com/docs/connectors/building/authentication);
