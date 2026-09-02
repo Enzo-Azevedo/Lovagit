@@ -27,7 +27,7 @@
     "default_path": "sidepanel/index.html"
   },
   "options_page": "options/index.html",
-  "permissions": ["storage", "unlimitedStorage", "sidePanel", "identity"],
+  "permissions": ["storage", "sidePanel", "identity"],
   "host_permissions": ["https://api.github.com/*"],
   "optional_host_permissions": ["https://*/*"],
   "content_security_policy": {

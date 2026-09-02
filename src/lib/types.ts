@@ -2,13 +2,6 @@
  *  esse formato como chave de isolamento — nunca o id numerico do GitHub. */
 export type RepoId = string;
 
-/** Imagem anexada a uma mensagem do chat. Persistida na conversa como base64. */
-export interface ChatAttachment {
-  name: string;
-  mimeType: string;
-  dataBase64: string;
-}
-
 export interface RepoRef {
   id: RepoId;
   owner: string;
@@ -43,7 +36,7 @@ export interface RepoMap {
   dirCount: number;
 }
 
-export type ChatRole = 'user' | 'assistant' | 'tool';
+export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
 
 export interface ToolCall {
   id: string;
@@ -64,7 +57,6 @@ export interface ChatMessage {
   repoId: RepoId;
   role: ChatRole;
   content: string;
-  attachments?: ChatAttachment[];
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
   createdAt: number;
@@ -98,7 +90,7 @@ export interface Checkpoint {
   restoredFrom?: string;
 }
 
-export type ProviderKind = 'anthropic' | 'openai-compatible';
+export type ProviderKind = 'anthropic' | 'openai-compatible' | 'oauth';
 
 export interface BaseProviderConfig {
   id: string;
@@ -119,7 +111,23 @@ export interface OpenAICompatibleProviderConfig extends BaseProviderConfig {
   baseUrl: string;
 }
 
-export type ProviderConfig = AnthropicProviderConfig | OpenAICompatibleProviderConfig;
+/** Login via OAuth 2.0 + PKCE em um provedor terceiro. O access token obtido e'
+ *  usado como Bearer contra um endpoint no formato OpenAI (chat/completions). */
+export interface OAuthProviderConfig extends BaseProviderConfig {
+  kind: 'oauth';
+  baseUrl: string;
+  authorizationUrl: string;
+  tokenUrl: string;
+  clientId: string;
+  scopes: string[];
+  /** Alguns provedores exigem `audience`/params extras no authorize. */
+  extraAuthParams?: Record<string, string>;
+}
+
+export type ProviderConfig =
+  | AnthropicProviderConfig
+  | OpenAICompatibleProviderConfig
+  | OAuthProviderConfig;
 
 export interface Settings {
   providers: ProviderConfig[];

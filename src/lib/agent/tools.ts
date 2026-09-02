@@ -2,6 +2,9 @@ import { getFileContent, GitHubError, searchCode } from '../github/client';
 import { isReadablePath } from '../github/mapper';
 import { applyChanges, normalizeRepoPath, type ApplyResult } from '../github/writer';
 import { diffLines, diffStats } from '../diff';
+import { callMcpTool, mcpToolSchemas } from '../mcp/registry';
+import { parseNamespacedToolName } from '../mcp/protocol';
+import type { McpServerConfig } from '../mcp/types';
 import type { PendingFileChange, RepoMap, ToolCall, ToolResult } from '../types';
 import type { ToolSchema } from '../ai/types';
 import { ContextIsolationError, type RepoScope } from './isolation';
@@ -96,9 +99,19 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
   },
 ];
 
+/**
+ * Junta as tools nativas do agente com as dos servidores MCP habilitados para
+ * ESTE repositorio. Servidor nao habilitado simplesmente nao existe no prompt.
+ */
+export function buildToolSchemas(mcpServers: McpServerConfig[]): ToolSchema[] {
+  return [...TOOL_SCHEMAS, ...mcpToolSchemas(mcpServers)];
+}
+
 export interface ToolRuntime {
   scope: RepoScope;
   map: RepoMap;
+  /** Ja filtrados por repositorio antes de chegar aqui. */
+  mcpServers: McpServerConfig[];
   /** Commit/branch de leitura. Avanca apos cada commit aplicado. */
   ref: string;
   pending: Map<string, PendingFileChange>;
@@ -162,8 +175,39 @@ async function readFile(runtime: ToolRuntime, path: string): Promise<string> {
   return file.content;
 }
 
+async function executeMcpTool(runtime: ToolRuntime, call: ToolCall): Promise<ToolResult> {
+  const parsed = parseNamespacedToolName(call.name);
+  if (!parsed) return fail(call, `Nome de tool MCP invalido: ${call.name}`);
+
+  const server = runtime.mcpServers.find((candidate) => candidate.id === parsed.serverId);
+  if (!server) {
+    return fail(
+      call,
+      `O servidor MCP dessa ferramenta nao esta habilitado para ${runtime.scope.repoId}.`,
+    );
+  }
+  // Defesa em profundidade: a lista ja vem filtrada, mas um servidor que
+  // escapasse do filtro seria um furo de isolamento, nao um erro de tool.
+  if (!server.enabledRepoIds.includes(runtime.scope.repoId)) {
+    throw new ContextIsolationError(
+      `Servidor MCP ${server.label} nao esta habilitado para ${runtime.scope.repoId}.`,
+      'scope-mismatch',
+    );
+  }
+
+  const result = await callMcpTool(server, parsed.toolName, call.input, runtime.signal);
+  return {
+    toolCallId: call.id,
+    name: call.name,
+    content: result.content,
+    isError: result.isError,
+  };
+}
+
 export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise<ToolResult> {
   try {
+    if (call.name.startsWith('mcp__')) return await executeMcpTool(runtime, call);
+
     switch (call.name) {
       case 'list_directory':
         return ok(call, listDirectory(runtime, String(call.input.path ?? '')));
@@ -285,8 +329,8 @@ export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise
         return fail(call, `Tool desconhecida: ${call.name}`);
     }
   } catch (error) {
-    // Falha de isolamento nunca vira "erro de tool": ela precisa subir como
-    // defeito de isolamento, nao como resposta para o modelo.
+    // Falha de isolamento nunca vira "erro de tool": ela precisa subir para o
+    // modulo de erros como defeito de alta prioridade.
     if (error instanceof ContextIsolationError) throw error;
     if (error instanceof GitHubError && error.status === 404) {
       return fail(call, `Nao encontrado no repositorio: ${error.message}`);

@@ -5,8 +5,11 @@ import { deleteSecret, getSecret, hasSecret, SecretNames, setSecret } from '../l
 import { PROVIDER_PRESETS, providerFromPreset } from '../lib/ai/presets';
 import { validateProviderKey, type ValidationResult } from '../lib/ai/validate';
 import { providerOrigin } from '../lib/ai/registry';
-import { installErrorHandlers } from '../lib/errlog';
+import { getRedirectUri, getStoredTokens, loginWithOAuth, logoutOAuth } from '../lib/ai/oauth';
+import { installErrorHandlers } from '../lib/telemetry/reporter';
 import type { ProviderConfig, Settings } from '../lib/types';
+import { McpSection } from './McpSection';
+import { TelemetrySection } from './TelemetrySection';
 
 function Field({
   label,
@@ -40,6 +43,7 @@ export function Options() {
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
   const [validations, setValidations] = useState<Record<string, ValidationResult>>({});
   const [validatingId, setValidatingId] = useState<string | null>(null);
+  const [oauthStatus, setOauthStatus] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -47,10 +51,17 @@ export function Options() {
     setSettings(loaded);
     setPatSaved(await hasSecret(SecretNames.githubPat));
     const keys: Record<string, boolean> = {};
+    const oauth: Record<string, string> = {};
     for (const provider of loaded.providers) {
-      keys[provider.id] = Boolean(await getSecret(SecretNames.providerApiKey(provider.id)));
+      if (provider.kind === 'oauth') {
+        const tokens = await getStoredTokens(provider.id);
+        oauth[provider.id] = tokens ? 'conectado' : 'desconectado';
+      } else {
+        keys[provider.id] = Boolean(await getSecret(SecretNames.providerApiKey(provider.id)));
+      }
     }
     setHasProviderKey(keys);
+    setOauthStatus(oauth);
   }, []);
 
   useEffect(() => {
@@ -114,6 +125,7 @@ export function Options() {
       if (!settings) return;
       const providers = settings.providers.filter((provider) => provider.id !== id);
       await deleteSecret(SecretNames.providerApiKey(id));
+      await logoutOAuth(id);
       await saveSettings({
         providers,
         activeProviderId: settings.activeProviderId === id ? (providers[0]?.id ?? null) : settings.activeProviderId,
@@ -165,6 +177,22 @@ export function Options() {
     setValidatingId(null);
     setMessage(`${provider.label}: ${result.message}`);
   }, []);
+
+  const doOAuthLogin = useCallback(
+    async (provider: ProviderConfig) => {
+      if (provider.kind !== 'oauth') return;
+      const origin = providerOrigin(provider);
+      if (origin) await chrome.permissions.request({ origins: [origin] });
+      try {
+        await loginWithOAuth(provider);
+        setMessage(`Login em ${provider.label} concluido.`);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : String(error));
+      }
+      await reload();
+    },
+    [reload],
+  );
 
   if (!settings) return <div className="p-6 text-xs text-ink-400">Carregando...</div>;
 
@@ -240,7 +268,7 @@ export function Options() {
 
         {settings.providers.length === 0 && (
           <p className="text-xs text-ink-400">
-            Nenhum provedor configurado. Adicione um acima com a chave de API (BYOK).
+            Nenhum provedor configurado. Adicione um acima — chave de API (BYOK) ou login OAuth.
           </p>
         )}
 
@@ -296,58 +324,128 @@ export function Options() {
               </Field>
             </div>
 
-            <Field
-              label="Chave de API"
-              hint="Cifrada no cofre local. Nunca sai do navegador exceto para o proprio provedor."
-            >
-              <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                {(() => {
-                  const docsUrl = PROVIDER_PRESETS.find(
-                    (preset) => preset.kind === provider.kind && preset.docsUrl,
-                  )?.docsUrl;
-                  return docsUrl ? (
-                    <button
-                      className="rounded-md border border-ink-700 px-3 py-1.5 text-xs text-ink-200"
-                      onClick={() => void chrome.tabs.create({ url: docsUrl })}
-                    >
-                      Abrir painel de chaves
-                    </button>
-                  ) : null;
-                })()}
-                <button
-                  className="rounded-md border border-ink-700 px-3 py-1.5 text-xs text-ink-200 disabled:opacity-40"
-                  disabled={validatingId === provider.id}
-                  onClick={() => void revalidate(provider)}
+            {provider.kind === 'oauth' ? (
+              <div className="space-y-3">
+                <p className="rounded-md border border-ink-700 bg-ink-900 px-2 py-1.5 text-[11px] text-ink-400">
+                  Anthropic e OpenAI nao oferecem OAuth para acesso a API por terceiros — a
+                  Anthropic restringe o fluxo ao Claude Code e ao claude.ai, e o login da OpenAI e
+                  identidade, nao acesso a API. Para essas duas, use chave de API acima. Este bloco
+                  serve para provedores que expoem OAuth para a propria API.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Authorization URL">
+                    <input
+                      className={inputClass}
+                      value={provider.authorizationUrl}
+                      onChange={(event) =>
+                        void updateProvider(provider.id, { authorizationUrl: event.target.value })
+                      }
+                    />
+                  </Field>
+                  <Field label="Token URL">
+                    <input
+                      className={inputClass}
+                      value={provider.tokenUrl}
+                      onChange={(event) => void updateProvider(provider.id, { tokenUrl: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Client ID">
+                    <input
+                      className={inputClass}
+                      value={provider.clientId}
+                      onChange={(event) => void updateProvider(provider.id, { clientId: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Scopes (separados por espaco)">
+                    <input
+                      className={inputClass}
+                      value={provider.scopes.join(' ')}
+                      onChange={(event) =>
+                        void updateProvider(provider.id, {
+                          scopes: event.target.value.split(/\s+/).filter(Boolean),
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+                <Field
+                  label="Redirect URI (registre esta URL no provedor)"
+                  hint="A extensao usa OAuth 2.0 com PKCE e nao guarda client_secret — nao existe segredo seguro em codigo que roda no navegador."
                 >
-                  {validatingId === provider.id ? 'Validando...' : 'Testar chave salva'}
-                </button>
-                {validations[provider.id] && (
-                  <span
-                    className={`text-[11px] ${validations[provider.id].ok ? 'text-lime-accent' : 'text-red-300'}`}
+                  <input className={inputClass} readOnly value={getRedirectUri()} />
+                </Field>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded-md bg-lime-accent px-3 py-1.5 text-xs font-medium text-ink-950"
+                    onClick={() => void doOAuthLogin(provider)}
                   >
-                    {validations[provider.id].message}
+                    Fazer login
+                  </button>
+                  <button
+                    className="rounded-md border border-ink-700 px-3 py-1.5 text-xs text-ink-200"
+                    onClick={() => void logoutOAuth(provider.id).then(reload)}
+                  >
+                    Sair
+                  </button>
+                  <span className="text-[11px] text-ink-400">
+                    Status: {oauthStatus[provider.id] ?? 'desconectado'}
                   </span>
-                )}
+                </div>
               </div>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  className={inputClass}
-                  value={keyDrafts[provider.id] ?? ''}
-                  placeholder={hasProviderKey[provider.id] ? 'chave salva — digite para substituir' : 'sk-...'}
-                  onChange={(event) =>
-                    setKeyDrafts((prev) => ({ ...prev, [provider.id]: event.target.value }))
-                  }
-                />
-                <button
-                  className="rounded-md bg-lime-accent px-3 py-1.5 text-xs font-medium text-ink-950 disabled:opacity-40"
-                  disabled={!(keyDrafts[provider.id] ?? '').trim()}
-                  onClick={() => void saveProviderKey(provider, keyDrafts[provider.id] ?? '')}
-                >
-                  Salvar
-                </button>
-              </div>
-            </Field>
+            ) : (
+              <Field
+                label="Chave de API"
+                hint="Cifrada no cofre local. Nunca sai do navegador exceto para o proprio provedor."
+              >
+                <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                  {(() => {
+                    const docsUrl = PROVIDER_PRESETS.find(
+                      (preset) => preset.kind === provider.kind && preset.docsUrl,
+                    )?.docsUrl;
+                    return docsUrl ? (
+                      <button
+                        className="rounded-md border border-ink-700 px-3 py-1.5 text-xs text-ink-200"
+                        onClick={() => void chrome.tabs.create({ url: docsUrl })}
+                      >
+                        Abrir painel de chaves
+                      </button>
+                    ) : null;
+                  })()}
+                  <button
+                    className="rounded-md border border-ink-700 px-3 py-1.5 text-xs text-ink-200 disabled:opacity-40"
+                    disabled={validatingId === provider.id}
+                    onClick={() => void revalidate(provider)}
+                  >
+                    {validatingId === provider.id ? 'Validando...' : 'Testar chave salva'}
+                  </button>
+                  {validations[provider.id] && (
+                    <span
+                      className={`text-[11px] ${validations[provider.id].ok ? 'text-lime-accent' : 'text-red-300'}`}
+                    >
+                      {validations[provider.id].message}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    className={inputClass}
+                    value={keyDrafts[provider.id] ?? ''}
+                    placeholder={hasProviderKey[provider.id] ? 'chave salva — digite para substituir' : 'sk-...'}
+                    onChange={(event) =>
+                      setKeyDrafts((prev) => ({ ...prev, [provider.id]: event.target.value }))
+                    }
+                  />
+                  <button
+                    className="rounded-md bg-lime-accent px-3 py-1.5 text-xs font-medium text-ink-950 disabled:opacity-40"
+                    disabled={!(keyDrafts[provider.id] ?? '').trim()}
+                    onClick={() => void saveProviderKey(provider, keyDrafts[provider.id] ?? '')}
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </Field>
+            )}
           </div>
         ))}
       </section>
@@ -372,6 +470,10 @@ export function Options() {
           </span>
         </label>
       </section>
+
+      <McpSection />
+
+      <TelemetrySection />
     </div>
   );
 }

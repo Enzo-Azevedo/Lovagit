@@ -1,4 +1,6 @@
 import { summarizeTree } from '../github/mapper';
+import { namespacedToolName } from '../mcp/protocol';
+import type { McpServerConfig } from '../mcp/types';
 import type { RepoMap } from '../types';
 import type { RepoScope } from './isolation';
 
@@ -16,7 +18,12 @@ function formatLanguages(languages: Record<string, number>): string {
  * Monta o system prompt de UMA conversa. Recebe apenas o escopo e o mapa
  * daquele repositorio — por construcao, nao ha como um repositorio vazar aqui.
  */
-export function buildSystemPrompt(scope: RepoScope, map: RepoMap, autoApply: boolean): string {
+export function buildSystemPrompt(
+  scope: RepoScope,
+  map: RepoMap,
+  autoApply: boolean,
+  mcpServers: McpServerConfig[] = [],
+): string {
   const writePolicy = autoApply
     ? [
         'Ao chamar `commit_changes`, a extensao executa nesta ordem, sem intervencao do usuario:',
@@ -28,6 +35,26 @@ export function buildSystemPrompt(scope: RepoScope, map: RepoMap, autoApply: boo
         'Ao chamar `commit_changes`, as alteracoes ficam aguardando aprovacao manual do',
         'usuario na interface. Explique o que foi alterado e espere — nao tente commitar de novo.',
       ].join('\n');
+
+  const mcpSection =
+    mcpServers.length === 0
+      ? ''
+      : `
+
+# Ferramentas externas (MCP) liberadas para este repositorio
+${mcpServers
+  .map(
+    (server) =>
+      `## ${server.label}\n${server.tools
+        .filter((tool) => !server.disabledTools.includes(tool.name))
+        .map((tool) => `- \`${namespacedToolName(server.id, tool.name)}\`: ${tool.description}`)
+        .join('\n')}`,
+  )
+  .join('\n\n')}
+
+Essas ferramentas foram habilitadas especificamente para ${scope.repoId}. Use-as
+quando ajudarem na tarefa, e nunca para buscar ou gravar informacao de outro
+repositorio.`;
 
   return `Voce e' o Lovagit: um agente de engenharia de software que trabalha em UM unico
 repositorio do GitHub, atraves da API do GitHub, a partir de uma extensao de navegador.
@@ -71,6 +98,8 @@ ${writePolicy}
 
 # Mapa do repositorio
 ${summarizeTree(map.entries)}
+
+${mcpSection}
 
 # Arquivos-chave ja lidos
 ${

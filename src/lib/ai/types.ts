@@ -1,5 +1,4 @@
 import type { ToolCall, ToolResult } from '../types';
-import type { ChatAttachment } from '../types';
 
 export interface ToolSchema {
   name: string;
@@ -20,8 +19,6 @@ export interface ProviderTurn {
   text?: string;
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
-  /** Imagens anexadas pelo usuario; as do historico voltam a entrar no turno. */
-  images?: ChatAttachment[];
 }
 
 export interface CompletionRequest {

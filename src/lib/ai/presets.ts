@@ -9,6 +9,8 @@ export interface ProviderPreset {
   model: string;
   modelHint: string;
   docsUrl?: string;
+  /** Campos extras exibidos no formulario (usado pelo preset OAuth). */
+  needsOAuthFields?: boolean;
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -56,6 +58,19 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     model: '',
     modelHint: 'Identificador do modelo aceito pelo seu endpoint',
   },
+  {
+    // Anthropic e OpenAI nao oferecem OAuth para acesso a API por terceiros:
+    // a Anthropic restringe o fluxo ao Claude Code e ao claude.ai, e o
+    // "Sign in with ChatGPT" e identidade, nao acesso a API. Este preset serve
+    // para provedores que de fato expoem OAuth para a propria API.
+    key: 'oauth',
+    label: 'Login OAuth (provedor que ofereca OAuth para a API)',
+    kind: 'oauth',
+    baseUrl: '',
+    model: '',
+    modelHint: 'Identificador do modelo aceito pelo provedor',
+    needsOAuthFields: true,
+  },
 ];
 
 export function providerFromPreset(preset: ProviderPreset): ProviderConfig {
@@ -67,6 +82,17 @@ export function providerFromPreset(preset: ProviderPreset): ProviderConfig {
   };
   if (preset.kind === 'anthropic') {
     return { ...base, kind: 'anthropic', baseUrl: preset.baseUrl };
+  }
+  if (preset.kind === 'oauth') {
+    return {
+      ...base,
+      kind: 'oauth',
+      baseUrl: preset.baseUrl,
+      authorizationUrl: '',
+      tokenUrl: '',
+      clientId: '',
+      scopes: [],
+    };
   }
   return { ...base, kind: 'openai-compatible', baseUrl: preset.baseUrl };
 }
