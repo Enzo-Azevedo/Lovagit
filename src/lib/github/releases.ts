@@ -13,12 +13,20 @@ export const EXTENSION_REPO = 'Enzo-Azevedo/Lovagit';
  */
 export const LATEST_TAG = 'latest';
 
-/** O MV3 proibe codigo remoto, entao a extensao nao se atualiza sozinha: o
- *  maximo honesto e' apontar o download. Reconsultar a cada abertura do painel
- *  so gastaria cota. */
-export const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+/**
+ * De quanto em quanto tempo a extensao procura build novo.
+ *
+ * Quem decide a cadencia e' o alarme do service worker; o cache usa o MESMO
+ * intervalo para o painel nao disparar uma consulta a mais logo depois da que o
+ * alarme acabou de fazer. Duas consultas por hora cabem com folga no limite de
+ * 60/hora que o GitHub da a quem nao manda token.
+ */
+export const CHECK_INTERVAL_MINUTES = 30;
+export const CACHE_TTL_MS = CHECK_INTERVAL_MINUTES * 60 * 1000;
 
-const CACHE_KEY = 'extension:latest-build';
+/** Onde a ultima consulta fica. O painel observa esta chave para se atualizar
+ *  sozinho quando o alarme traz build novo com a janela ja aberta. */
+export const CACHE_KEY = 'extension:latest-build';
 
 export interface LatestBuild {
   /** Titulo da release, ex.: "Build da main (a39f224)". */

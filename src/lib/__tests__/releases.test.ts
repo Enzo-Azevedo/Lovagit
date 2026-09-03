@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildStatus,
+  CACHE_TTL_MS,
+  CHECK_INTERVAL_MINUTES,
   formatBytes,
   parseCommit,
   parseVersion,
@@ -68,5 +70,19 @@ describe('formatBytes', () => {
     expect(formatBytes(512)).toBe('512 B');
     expect(formatBytes(165135)).toBe('161 KB');
     expect(formatBytes(3 * 1024 * 1024)).toBe('3.0 MB');
+  });
+});
+
+describe('cadencia da procura por build novo', () => {
+  it('procura de 30 em 30 minutos', () => {
+    expect(CHECK_INTERVAL_MINUTES).toBe(30);
+  });
+
+  it('o cache dura exatamente um intervalo — o painel nao consulta em dobro', () => {
+    // Quem bate no GitHub e' o alarme do service worker. Se o cache vencesse
+    // antes, abrir o painel logo depois de uma batida dispararia outra consulta
+    // para receber a mesma resposta, gastando a cota de 60/hora de quem nao tem
+    // token configurado.
+    expect(CACHE_TTL_MS).toBe(CHECK_INTERVAL_MINUTES * 60 * 1000);
   });
 });

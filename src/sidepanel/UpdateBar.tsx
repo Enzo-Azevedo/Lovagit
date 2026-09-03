@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   buildStatus,
+  CACHE_KEY,
   fetchLatestBuild,
   formatBytes,
   installedVersion,
@@ -74,6 +75,25 @@ export function UpdateBar() {
   useEffect(() => {
     void buscar(false);
   }, [buscar]);
+
+  // O service worker procura build novo a cada 30 minutos, inclusive com o
+  // painel aberto. Sem escutar a chave do cache, essa procura so apareceria aqui
+  // no proximo reload — e quem deixa o painel aberto o dia todo nunca veria.
+  useEffect(() => {
+    const aoMudar = (
+      mudancas: Record<string, chrome.storage.StorageChange>,
+      area: string,
+    ): void => {
+      if (area !== 'local') return;
+      const novo = mudancas[CACHE_KEY]?.newValue as LatestBuild | undefined;
+      if (novo) {
+        setBuild(novo);
+        setErro(null);
+      }
+    };
+    chrome.storage.onChanged.addListener(aoMudar);
+    return () => chrome.storage.onChanged.removeListener(aoMudar);
+  }, []);
 
   const situacao = build === null ? null : buildStatus(build, instalada);
   const aparencia = situacao === null ? null : APARENCIA[situacao];
