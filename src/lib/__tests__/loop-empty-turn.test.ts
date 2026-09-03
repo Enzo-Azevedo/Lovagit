@@ -95,6 +95,26 @@ describe('turno vazio', () => {
   });
 });
 
+describe('memoria do turno', () => {
+  it('turno de pergunta e resposta nao grava nada', async () => {
+    // Sem consequencia no repositorio, nao ha fato a guardar. Memoria cheia de
+    // ruido atrapalha tanto quanto memoria nenhuma.
+    const { events } = await run(providerReturning({ text: 'o header fica em src/App.tsx' }));
+    expect(events.filter((event) => event.type === 'memory')).toEqual([]);
+  });
+
+  it('o commit NAO vira memoria aqui — quem grava e quem persiste o checkpoint', async () => {
+    // O mesmo commit acontece tambem pelo botao de aprovacao manual, fora deste
+    // laco. Gravar nos dois lugares duplicaria; gravar so aqui perdia todo
+    // commit aprovado na mao — que foi exatamente o defeito.
+    const { events } = await run(providerReturning({ text: 'pronto' }));
+    const memorias = events.filter((event) => event.type === 'memory');
+    expect(memorias.some((event) => event.type === 'memory' && event.entry.kind === 'action')).toBe(
+      false,
+    );
+  });
+});
+
 describe('raciocinio por passo', () => {
   it('fica na mensagem do passo, ao lado da resposta', async () => {
     const { messages } = await run(

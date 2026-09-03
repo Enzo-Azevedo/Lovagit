@@ -15,7 +15,7 @@ import type { RepoId } from '../lib/types';
 const inputClass =
   'w-full rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs text-ink-200 outline-none placeholder:text-ink-600 focus:border-ink-600';
 const primaryButton =
-  'rounded-md bg-lime-accent px-3 py-1.5 text-xs font-medium text-ink-950 disabled:opacity-40';
+  'rounded-md bg-gradient-to-r from-lov-orange to-lov-pink px-3 py-1.5 text-xs font-medium text-lov-ink disabled:opacity-40';
 const ghostButton = 'rounded-md border border-ink-700 px-3 py-1.5 text-xs text-ink-200';
 
 export function McpSection() {

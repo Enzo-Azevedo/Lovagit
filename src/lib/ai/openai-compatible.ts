@@ -14,9 +14,15 @@ import {
  * o Bearer token.
  */
 
+/** Parte de uma mensagem multimodal. So aparece quando ha imagem: mandar texto
+ *  sempre como array quebra endpoint compativel mais simples. */
+type OpenAIContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null;
+  content: string | OpenAIContentPart[] | null;
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
 }
@@ -32,7 +38,21 @@ export function toOpenAIMessages(request: CompletionRequest): OpenAIMessage[] {
           content: result.isError ? `ERRO: ${result.content}` : result.content,
         });
       }
-      if (turn.text) messages.push({ role: 'user', content: turn.text });
+      const images = turn.images ?? [];
+      if (images.length > 0) {
+        messages.push({
+          role: 'user',
+          content: [
+            ...(turn.text ? [{ type: 'text' as const, text: turn.text }] : []),
+            ...images.map((image) => ({
+              type: 'image_url' as const,
+              image_url: { url: `data:${image.mediaType};base64,${image.dataBase64}` },
+            })),
+          ],
+        });
+      } else if (turn.text) {
+        messages.push({ role: 'user', content: turn.text });
+      }
       continue;
     }
     const toolCalls = turn.toolCalls ?? [];

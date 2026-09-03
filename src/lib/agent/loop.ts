@@ -1,7 +1,19 @@
 import type { AIProvider, ProviderTurn } from '../ai/types';
 import type { ApplyResult } from '../github/writer';
-import type { ChatMessage, PendingFileChange, RepoId, RepoMap, ToolCall } from '../types';
-import { assertNoForeignRepoLeak, assertScopedMap, type RepoScope } from './isolation';
+import type {
+  ChatMessage,
+  PendingFileChange,
+  RepoId,
+  RepoMap,
+  ToolCall,
+  TurnImage,
+} from '../types';
+import {
+  assertNoForeignRepoLeak,
+  assertScopedMap,
+  leakCheckPayload,
+  type RepoScope,
+} from './isolation';
 import { buildSystemPrompt } from './prompt';
 import type { McpServerConfig } from '../mcp/types';
 import type { MemoryEntry } from '../memory/types';
@@ -44,6 +56,12 @@ export interface RunAgentOptions {
   /** Historico ja filtrado pelo repositorio da conversa. */
   history: ChatMessage[];
   userText: string;
+  /**
+   * Imagens anexadas a ESTE turno. Nao entram no historico: uma captura de tela
+   * em base64 seria reenviada em todo turno seguinte, multiplicando o custo e
+   * enchendo a cota do storage.
+   */
+  images?: TurnImage[];
   provider: AIProvider;
   autoApply: boolean;
   /** Todos os repositorios conectados — usado apenas pelo canario de vazamento. */
@@ -62,6 +80,21 @@ function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${messageCounter}`;
 }
 
+/**
+ * Marca no texto que houve anexo, ja que a imagem nao volta.
+ *
+ * Sem isso o modelo leria "o que ha de errado nesta tela?" sem tela nenhuma e
+ * responderia com chute. Com a marca, ele sabe que existiu uma imagem que nao
+ * esta mais visivel — e pode pedir de novo.
+ */
+export function withAttachmentNote(message: ChatMessage): string {
+  const anexos = message.attachments ?? [];
+  if (anexos.length === 0) return message.content;
+  const lista = anexos.map((anexo) => anexo.name).join(', ');
+  return `${message.content}
+[${anexos.length} imagem(ns) enviada(s) neste turno: ${lista} — nao estao mais visiveis]`;
+}
+
 /** Converte o historico persistido em turnos neutros de provedor. */
 export function historyToTurns(history: ChatMessage[]): ProviderTurn[] {
   const window = history.slice(-HISTORY_WINDOW);
@@ -71,7 +104,7 @@ export function historyToTurns(history: ChatMessage[]): ProviderTurn[] {
   const turns: ProviderTurn[] = [];
   for (const message of window) {
     if (message.role === 'user') {
-      turns.push({ role: 'user', text: message.content });
+      turns.push({ role: 'user', text: withAttachmentNote(message) });
     } else if (message.role === 'assistant') {
       turns.push({
         role: 'assistant',
@@ -104,11 +137,21 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
   const tools = buildToolSchemas(options.mcpServers);
   const produced: ChatMessage[] = [];
 
+  const imagens = options.images ?? [];
   const userMessage: ChatMessage = {
     id: newId('msg'),
     repoId,
     role: 'user',
     content: options.userText,
+    // Fica so o registro de que houve anexo; o conteudo morre com o turno.
+    attachments:
+      imagens.length > 0
+        ? imagens.map((imagem, indice) => ({
+            name: `imagem-${indice + 1}`,
+            mediaType: imagem.mediaType,
+            bytes: Math.round((imagem.dataBase64.length * 3) / 4),
+          }))
+        : undefined,
     createdAt: Date.now(),
   };
   produced.push(userMessage);
@@ -116,7 +159,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
 
   const turns: ProviderTurn[] = [
     ...historyToTurns(options.history),
-    { role: 'user', text: options.userText },
+    { role: 'user', text: options.userText, ...(imagens.length > 0 ? { images: imagens } : {}) },
   ];
 
   // Tudo que o usuario escreveu nesta conversa: separa "usuario citou outro
@@ -142,18 +185,10 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     onPendingChanged: () => onEvent({ type: 'pending-changed', changes: [...pending.values()] }),
     onCommitted: async (result) => {
       committed = result;
-      onEvent({
-        type: 'memory',
-        entry: {
-          repoId,
-          kind: 'action',
-          summary: result.checkpoint.message,
-          refs: {
-            commitSha: result.checkpoint.commitSha,
-            paths: result.checkpoint.files.map((arquivo) => arquivo.path),
-          },
-        },
-      });
+      // O commit NAO vira memoria aqui. Quem grava e' quem persiste o
+      // checkpoint, porque o mesmo commit tambem acontece pelo botao de
+      // aprovacao manual — fora deste laco. Gravar nos dois lugares
+      // duplicaria; gravar so aqui perdia todo commit aprovado na mao.
       ref = result.checkpoint.commitSha;
       runtime.ref = ref;
       pending.clear();
@@ -175,7 +210,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     // Ultima barreira antes de a requisicao sair da maquina.
     assertNoForeignRepoLeak(
       scope,
-      JSON.stringify({ system, turns }),
+      leakCheckPayload({ system, turns }),
       options.connectedRepoIds,
       userAuthoredText,
     );

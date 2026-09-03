@@ -7,7 +7,8 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'primary' | 'danger' | 'ghost' }) {
   const styles: Record<string, string> = {
     default: 'bg-ink-700 hover:bg-ink-600 text-ink-200 border border-ink-600',
-    primary: 'bg-lime-accent hover:bg-lime-300 text-ink-950 font-medium border border-transparent',
+    primary:
+      'bg-gradient-to-r from-lov-orange to-lov-pink text-lov-ink font-medium border border-transparent hover:from-lov-pink hover:to-lov-orange',
     danger: 'bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30',
     ghost: 'bg-transparent hover:bg-ink-800 text-ink-400 hover:text-ink-200 border border-transparent',
   };
@@ -22,7 +23,7 @@ export function Button({
 export function Spinner({ label }: { label?: string }) {
   return (
     <span className="inline-flex items-center gap-2 text-ink-400">
-      <span className="h-3 w-3 animate-spin rounded-full border-2 border-ink-600 border-t-lime-accent" />
+      <span className="h-3 w-3 animate-spin rounded-full border-2 border-ink-600 border-t-lov-orange" />
       {label}
     </span>
   );
