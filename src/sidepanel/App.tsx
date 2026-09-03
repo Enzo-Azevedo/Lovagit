@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
-import { hasUnlimitedStorage, requestUnlimitedStorage } from '../lib/memory/store';
-import { saveSettings } from '../lib/storage';
+import { useEffect, useState } from 'react';
 import { installErrorHandlers } from '../lib/telemetry/reporter';
 import { ChatView } from './ChatView';
 import { ErrorReportToast } from './ErrorReportToast';
@@ -10,62 +8,10 @@ import { useCursorGlow } from './useCursorGlow';
 import { useRepos } from './useRepos';
 import { Button, ErrorNote, Spinner } from './ui';
 
-/** Banner de primeira abertura pedindo `unlimitedStorage`. Some para sempre
- *  depois da primeira resposta — concedida ou nao — porque pedir permissao
- *  exige gesto do usuario e reabrir a pergunta a cada painel seria spam. */
-function UnlimitedStorageBanner({ onDone }: { onDone: () => void }) {
-  const [pending, setPending] = useState(false);
-
-  const responder = useCallback(
-    async (pedir: boolean) => {
-      setPending(true);
-      if (pedir) await requestUnlimitedStorage();
-      await saveSettings({ unlimitedStorageAsked: true });
-      setPending(false);
-      onDone();
-    },
-    [onDone],
-  );
-
-  return (
-    <div className="space-y-2 border-b border-amber-500/30 bg-amber-500/5 p-3">
-      <p className="text-[11px] text-amber-300">
-        Sem armazenamento ilimitado, o Chrome da 10 MB para TUDO que a extensao guarda — mapa,
-        conversas, historico. Nessa cota, a memoria dos repositorios fica limitada a 4 MB para
-        o resto continuar cabendo. Permite o armazenamento ilimitado?
-      </p>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={pending}
-          className="rounded-md border border-amber-500/40 px-2.5 py-1 text-xs text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
-          onClick={() => void responder(true)}
-        >
-          Permitir
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          className="rounded-md px-2.5 py-1 text-xs text-ink-400 hover:text-ink-200 disabled:opacity-50"
-          onClick={() => void responder(false)}
-        >
-          Agora nao
-        </button>
-      </div>
-      <p className="text-[10px] text-ink-400">
-        Da para mudar depois nas configuracoes, secao de memoria.
-      </p>
-    </div>
-  );
-}
-
 export function App() {
   const { state, connect, remap, disconnect, syncGitHubUser } = useRepos();
   const [activeRepoId, setActiveRepoId] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
-  /** Esconde o banner assim que respondido, sem esperar o refresh do storage. */
-  const [storageBannerDismissed, setStorageBannerDismissed] = useState(false);
-  const [unlimitedGranted, setUnlimitedGranted] = useState(true);
 
   useCursorGlow();
 
@@ -77,18 +23,12 @@ export function App() {
   }, [state.hasToken, state.settings.githubUser, syncGitHubUser]);
 
   useEffect(() => {
-    void hasUnlimitedStorage().then(setUnlimitedGranted);
-  }, []);
-
-  useEffect(() => {
     if (activeRepoId && state.repos.some((repo) => repo.id === activeRepoId)) return;
     setActiveRepoId(state.repos[0]?.id ?? null);
   }, [activeRepoId, state.repos]);
 
   const activeRepo = state.repos.find((repo) => repo.id === activeRepoId) ?? null;
   const openOptions = () => chrome.runtime.openOptionsPage();
-  const showStorageBanner =
-    !unlimitedGranted && !storageBannerDismissed && !state.settings.unlimitedStorageAsked;
 
   if (state.loading) {
     return (
@@ -147,10 +87,6 @@ export function App() {
       </header>
 
       <UpdateBar />
-
-      {showStorageBanner && (
-        <UnlimitedStorageBanner onDone={() => setStorageBannerDismissed(true)} />
-      )}
 
       {state.error && (
         <div className="p-2">

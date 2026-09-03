@@ -342,10 +342,19 @@ conversas, histórico, memória. A memória então se limita sozinha a 4 MB para
 resto continuar cabendo, **independente do teto configurado**: passar da cota
 faria a gravação falhar e derrubar coisas que não têm nada a ver com memória.
 
-A permissão está em `optional_permissions` e é pedida por um botão em
-Configurações, nunca na instalação. Ela cobre `chrome.storage.local`, IndexedDB,
-Cache Storage e OPFS, e isenta a extensão da limpeza automática do navegador —
-que é o que faz a memória ser realmente permanente.
+A permissão é **obrigatória**, concedida na instalação. Ela está entre as que o
+Chrome não aceita em `optional_permissions`: pedi-la em tempo de execução com
+`chrome.permissions.request` falha sempre. Até a v0.4.0 ela estava como opcional
+e havia um botão para concedê-la — o botão não funcionava, e o erro era engolido
+por um `catch` vazio, então ele não fazia nada nem avisava nada.
+
+Ela cobre `chrome.storage.local`, IndexedDB, Cache Storage e OPFS, e isenta a
+extensão da limpeza automática do navegador — que é o que faz a memória ser
+realmente permanente.
+
+> Vindo de uma versão anterior, a permissão só passa a valer depois de recarregar
+> a extensão em `chrome://extensions`. Até lá o teto de 4 MB continua em vigor, e
+> as Configurações dizem isso.
 
 ### Política de commit
 
@@ -511,7 +520,28 @@ que nunca existiu. De quebra, evita varrer megabytes com regex a cada passo.
 
 A paleta segue o [Lovable](https://lovable.dev): laranja `#FE7B02`, azul
 `#4B73FF`, rosa `#EA8AAB`. Botões primários usam o gradiente laranja→rosa da
-logo, no lugar do verde anterior.
+logo, e o anel de carregamento é um gradiente cônico nas três cores — cônico
+porque precisa dar a volta no círculo, e recortado por máscara radial porque
+borda não aceita gradiente.
+
+### Contraste do texto da IA
+
+As superfícies são translúcidas para o brilho passar por trás, mas **texto
+corrido não**: a resposta da IA fica sobre `ink-850` (90% opaco) com texto
+`ink-100`, ~15:1 de contraste. Sem essa superfície, a mesma frase mudava de
+legibilidade conforme o cursor passava atrás dela.
+
+### Markdown
+
+A resposta da IA é renderizada com títulos, listas, citações, régua, negrito,
+ênfase, código inline e blocos de código. O parser (`src/lib/markdown.ts`) é
+próprio e não conhece React — devolve estrutura, e quem desenha é o componente,
+o que permite testar a gramática inteira sem montar nada na tela.
+
+Nada vira HTML por string: cada trecho vira elemento React. Resposta de modelo é
+texto de terceiro, e `dangerouslySetInnerHTML` transformaria uma resposta hostil
+em execução dentro da extensão. Link com protocolo fora de `http(s)` vira texto,
+nunca algo clicável.
 
 O fundo é vidro: as superfícies são translúcidas e, atrás delas, um brilho
 radial nas cores da marca segue o cursor. A posição chega por variável CSS

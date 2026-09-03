@@ -39,7 +39,8 @@ import { AssistantStep } from './AssistantStep';
 import { DiffView } from './DiffView';
 import { TOOL_LABEL } from './toolTrace';
 import { imageFilesFrom, toPreviewUrl, toTurnImages, useAttachments } from './useAttachments';
-import { Button, ErrorNote, RichText, Spinner } from './ui';
+import { Markdown } from './Markdown';
+import { Button, ErrorNote, Spinner } from './ui';
 
 interface ChatViewProps {
   repo: RepoRef;
@@ -589,7 +590,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           if (message.role === 'user') {
             return (
               <div key={message.id} className="ml-6 rounded-lg bg-ink-800 px-3 py-2">
-                <RichText text={message.content} />
+                <Markdown text={message.content} />
                 {(message.attachments ?? []).length > 0 && (
                   <p className="mt-1 font-mono text-[10px] text-ink-400">
                     {message.attachments?.length} imagem(ns) enviada(s) neste turno
@@ -615,7 +616,11 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
             </div>
           </div>
         )}
-        {streaming && <RichText text={streaming} />}
+        {streaming && (
+          <div className="rounded-lg bg-ink-850 px-3 py-2">
+            <Markdown text={streaming} />
+          </div>
+        )}
         {running && <Spinner label={status || 'Trabalhando...'} />}
         {error && <ErrorNote>{error}</ErrorNote>}
 

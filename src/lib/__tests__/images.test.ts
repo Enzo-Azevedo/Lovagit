@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { toOpenAIMessages } from '../ai/openai-compatible';
 import { assertNoForeignRepoLeak, createScope, leakCheckPayload } from '../agent/isolation';
 import { historyToTurns, withAttachmentNote } from '../agent/loop';
-import type { ChatMessage } from '../types';
+import { indexBlobsByPath } from '../agent/tools';
+import type { ChatMessage, RepoMap } from '../types';
 
 const escopo = createScope({
   id: 'acme/site',
@@ -108,5 +109,26 @@ describe('anexo no historico', () => {
     const turnos = historyToTurns([comAnexo]);
     expect(turnos[0].images).toBeUndefined();
     expect(turnos[0].text).toContain('tela.png');
+  });
+});
+
+describe('indice da arvore por caminho', () => {
+  it('so indexa blobs, e responde por chave em vez de varrer', () => {
+    const mapa = {
+      entries: [
+        { path: 'src', type: 'tree', sha: 't' },
+        { path: 'src/App.tsx', type: 'blob', sha: 'a', size: 10 },
+        { path: 'src/index.ts', type: 'blob', sha: 'b', size: 20 },
+      ],
+    } as unknown as RepoMap;
+
+    const indice = indexBlobsByPath(mapa);
+
+    expect(indice.size).toBe(2);
+    expect(indice.get('src/App.tsx')?.size).toBe(10);
+    // Diretorio nao e' arquivo: continuar indexando levaria `read_file` a
+    // tratar uma pasta como blob.
+    expect(indice.get('src')).toBeUndefined();
+    expect(indice.get('nao/existe')).toBeUndefined();
   });
 });

@@ -12,8 +12,20 @@
   --color-ink-700: rgb(38 38 46 / 0.66);
   --color-ink-600: rgb(53 53 63 / 0.78);
 
+  /**
+   * Superficie de LEITURA: quase opaca de proposito.
+   *
+   * O resto da interface e' translucido para o brilho do cursor atravessar, mas
+   * texto corrido precisa de fundo previsivel — sobre o vidro, a mesma frase
+   * mudava de contraste conforme o mouse passava por tras dela.
+   */
+  --color-ink-850: rgb(22 22 27 / 0.9);
+
   --color-ink-400: #8b8b99;
+  --color-ink-300: #b6b6c4;
   --color-ink-200: #d5d5de;
+  /** Texto da IA: ~15:1 sobre `ink-850`, com folga sobre o minimo do WCAG AA. */
+  --color-ink-100: #f1f2f7;
 
   /* Paleta do Lovable: laranja e azul da marca, rosa e creme do gradiente da
      logo (laranja -> magenta -> roxo -> azul). */
@@ -75,6 +87,26 @@ body {
 .glass {
   backdrop-filter: blur(12px) saturate(120%);
   -webkit-backdrop-filter: blur(12px) saturate(120%);
+}
+
+/**
+ * Anel de carregamento em degrade nas cores da logo.
+ *
+ * O degrade e' conico (nao linear) porque ele precisa dar a volta no circulo; a
+ * mascara radial recorta o miolo e deixa so o anel. Uma borda comum nao aceita
+ * gradiente — dai o elemento inteiro ser o gradiente.
+ */
+.spinner-lov {
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg,
+    var(--color-lov-orange),
+    var(--color-lov-pink),
+    var(--color-lov-blue),
+    var(--color-lov-orange)
+  );
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
 }
 
 @media (prefers-reduced-motion: reduce) {

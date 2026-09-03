@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  buildStatus,
   fetchLatestBuild,
   formatBytes,
   installedVersion,
-  isNewerBuild,
   openDownload,
+  type BuildStatus,
   type LatestBuild,
 } from '../lib/github/releases';
 import { Button } from './ui';
@@ -16,6 +17,42 @@ import { Button } from './ui';
  * sozinha fora da Chrome Web Store: o maximo honesto e' dizer o que existe
  * publicado e abrir o download numa guia. Quem instala e' voce.
  */
+
+/** Aparencia da faixa e do botao para cada situacao do build publicado. */
+const APARENCIA: Record<
+  BuildStatus,
+  {
+    faixa: string;
+    botao: 'primary' | 'success' | 'ghost';
+    rotulo: string;
+    /** `true` quando nao ha nada a fazer: o botao vira selo. */
+    inerte: boolean;
+    descricao: (build: LatestBuild) => string;
+  }
+> = {
+  nova: {
+    faixa: 'border-lov-orange/30 bg-lov-orange/10 text-lov-orange',
+    botao: 'primary',
+    rotulo: 'Baixar zip',
+    inerte: false,
+    descricao: (build) => `novo build: v${build.version}`,
+  },
+  atual: {
+    faixa: 'border-emerald-500/25 text-emerald-300',
+    botao: 'success',
+    rotulo: 'Versao atualizada',
+    inerte: true,
+    descricao: () => 'voce esta na ultima versao publicada',
+  },
+  desconhecida: {
+    faixa: 'border-ink-700/60 text-ink-400',
+    botao: 'ghost',
+    rotulo: 'Baixar zip',
+    inerte: false,
+    descricao: () => 'build da main',
+  },
+};
+
 export function UpdateBar() {
   const [build, setBuild] = useState<LatestBuild | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -38,33 +75,37 @@ export function UpdateBar() {
     void buscar(false);
   }, [buscar]);
 
-  const novidade = build !== null && isNewerBuild(build, instalada);
+  const situacao = build === null ? null : buildStatus(build, instalada);
+  const aparencia = situacao === null ? null : APARENCIA[situacao];
 
   return (
     <div
-      className={`flex shrink-0 items-center gap-2 border-b px-3 py-1 text-[10px] ${
-        novidade
-          ? 'border-lov-orange/30 bg-lov-orange/10 text-lov-orange'
-          : 'border-ink-700/60 text-ink-400'
+      className={`glass flex shrink-0 items-center gap-2 border-b px-3 py-1 text-[10px] ${
+        aparencia?.faixa ?? 'border-ink-700/60 text-ink-400'
       }`}
     >
       <span className="font-mono">v{instalada}</span>
 
-      {build && (
+      {build && aparencia && (
         <>
           <span className="truncate text-ink-400">
-            {novidade ? `novo build: v${build.version}` : 'build da main'}
+            {aparencia.descricao(build)}
             {build.commit && ` · ${build.commit}`}
           </span>
           <Button
             className="ml-auto"
-            variant={novidade ? 'primary' : 'ghost'}
-            title={`${build.name} · ${formatBytes(build.sizeBytes)} · publicado em ${new Date(
-              build.publishedAt,
-            ).toLocaleString('pt-BR')}`}
-            onClick={() => void openDownload(build.downloadUrl)}
+            variant={aparencia.botao}
+            disabled={aparencia.inerte}
+            title={
+              aparencia.inerte
+                ? 'Nada a baixar: o build publicado tem a mesma versao desta instalacao'
+                : `${build.name} · ${formatBytes(build.sizeBytes)} · publicado em ${new Date(
+                    build.publishedAt,
+                  ).toLocaleString('pt-BR')}`
+            }
+            onClick={aparencia.inerte ? undefined : () => void openDownload(build.downloadUrl)}
           >
-            Baixar zip
+            {aparencia.rotulo}
           </Button>
         </>
       )}

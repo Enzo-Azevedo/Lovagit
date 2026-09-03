@@ -18,7 +18,7 @@ import { buildSystemPrompt } from './prompt';
 import type { McpServerConfig } from '../mcp/types';
 import type { MemoryEntry } from '../memory/types';
 import type { NewMemoryEntry } from '../memory/store';
-import { buildToolSchemas, executeTool, type ToolRuntime } from './tools';
+import { buildToolSchemas, executeTool, indexBlobsByPath, type ToolRuntime } from './tools';
 
 /** Teto de idas e voltas com o modelo em um unico turno do usuario. */
 const MAX_STEPS = 16;
@@ -177,6 +177,8 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
   const runtime: ToolRuntime = {
     scope,
     map,
+    // Uma vez por turno, reutilizado por toda leitura e escrita do passo.
+    blobsByPath: indexBlobsByPath(map),
     mcpServers: options.mcpServers,
     ref,
     pending,

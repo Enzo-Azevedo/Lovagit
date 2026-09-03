@@ -4,18 +4,24 @@ export function Button({
   variant = 'default',
   className = '',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'primary' | 'danger' | 'ghost' }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'default' | 'primary' | 'success' | 'danger' | 'ghost';
+}) {
   const styles: Record<string, string> = {
     default: 'bg-ink-700 hover:bg-ink-600 text-ink-200 border border-ink-600',
     primary:
       'bg-gradient-to-r from-lov-orange to-lov-pink text-lov-ink font-medium border border-transparent hover:from-lov-pink hover:to-lov-orange',
+    // Estado conquistado, nao acao: verde e sem hover, porque nao ha o que clicar.
+    success: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30',
     danger: 'bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30',
     ghost: 'bg-transparent hover:bg-ink-800 text-ink-400 hover:text-ink-200 border border-transparent',
   };
   return (
     <button
       {...props}
-      className={`rounded-md px-2.5 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${styles[variant]} ${className}`}
+      className={`rounded-md px-2.5 py-1.5 text-xs transition-colors disabled:cursor-not-allowed ${
+        variant === 'success' ? '' : 'disabled:opacity-40'
+      } ${styles[variant]} ${className}`}
     />
   );
 }
@@ -23,7 +29,7 @@ export function Button({
 export function Spinner({ label }: { label?: string }) {
   return (
     <span className="inline-flex items-center gap-2 text-ink-400">
-      <span className="h-3 w-3 animate-spin rounded-full border-2 border-ink-600 border-t-lov-orange" />
+      <span className="spinner-lov h-3.5 w-3.5 animate-spin" />
       {label}
     </span>
   );
@@ -58,22 +64,3 @@ export function ErrorNote({ children }: { children: ReactNode }) {
 }
 
 /** Render minimo de markdown: paragrafos + blocos de codigo com ```. */
-export function RichText({ text }: { text: string }) {
-  const parts = text.split(/```/);
-  return (
-    <div className="space-y-2 text-[13px] leading-relaxed whitespace-pre-wrap break-words">
-      {parts.map((part, index) =>
-        index % 2 === 1 ? (
-          <pre
-            key={index}
-            className="overflow-x-auto rounded-md border border-ink-700 bg-ink-950 p-2 font-mono text-[11px] text-ink-200"
-          >
-            <code>{part.replace(/^[\w+-]*\n/, '')}</code>
-          </pre>
-        ) : (
-          <span key={index}>{part}</span>
-        ),
-      )}
-    </div>
-  );
-}

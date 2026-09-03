@@ -5,7 +5,7 @@ import { diffLines, diffStats } from '../diff';
 import { callMcpTool, mcpToolSchemas } from '../mcp/registry';
 import { parseNamespacedToolName } from '../mcp/protocol';
 import type { McpServerConfig } from '../mcp/types';
-import type { PendingFileChange, RepoMap, ToolCall, ToolResult } from '../types';
+import type { PendingFileChange, RepoMap, ToolCall, ToolResult, TreeEntry } from '../types';
 import type { ToolSchema } from '../ai/types';
 import { ContextIsolationError, type RepoScope } from './isolation';
 
@@ -131,9 +131,28 @@ export function buildToolSchemas(mcpServers: McpServerConfig[]): ToolSchema[] {
   return [...TOOL_SCHEMAS, ...mcpToolSchemas(mcpServers)];
 }
 
+/**
+ * Indice `caminho -> entrada` da arvore, construido uma vez por turno.
+ *
+ * Antes, cada `read_file`/`write_file`/`delete_file` varria `map.entries`
+ * inteiro procurando um caminho. Num repositorio com milhares de arquivos e ate
+ * 16 passos por turno, era a mesma pergunta ("qual entrada tem este caminho?")
+ * respondida do zero toda vez. A relacao e' chave/valor; a estrutura passa a
+ * ser a que representa isso.
+ */
+export function indexBlobsByPath(map: RepoMap): Map<string, TreeEntry> {
+  const porCaminho = new Map<string, TreeEntry>();
+  for (const entry of map.entries) {
+    if (entry.type === 'blob') porCaminho.set(entry.path, entry);
+  }
+  return porCaminho;
+}
+
 export interface ToolRuntime {
   scope: RepoScope;
   map: RepoMap;
+  /** Indice da arvore por caminho. Ver `indexBlobsByPath`. */
+  blobsByPath: Map<string, TreeEntry>;
   /** Ja filtrados por repositorio antes de chegar aqui. */
   mcpServers: McpServerConfig[];
   /** Commit/branch de leitura. Avanca apos cada commit aplicado. */
@@ -189,7 +208,7 @@ async function readFile(runtime: ToolRuntime, path: string): Promise<string> {
     return `(versao pendente, ainda nao commitada)\n${staged.content ?? ''}`;
   }
 
-  const entry = runtime.map.entries.find((e) => e.path === path && e.type === 'blob');
+  const entry = runtime.blobsByPath.get(path);
   if (entry?.size && entry.size > MAX_READ_BYTES) {
     return `Arquivo grande demais para ler inteiro (${entry.size} bytes). Use search_code para localizar o trecho relevante.`;
   }
@@ -278,7 +297,7 @@ export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise
       case 'write_file': {
         const path = normalizeRepoPath(String(call.input.path ?? ''));
         const content = String(call.input.content ?? '');
-        const existing = runtime.map.entries.find((e) => e.path === path && e.type === 'blob');
+        const existing = runtime.blobsByPath.get(path);
 
         let previousContent: string | null = runtime.pending.get(path)?.content ?? null;
         if (previousContent === null && existing) {
@@ -313,7 +332,7 @@ export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise
 
       case 'delete_file': {
         const path = normalizeRepoPath(String(call.input.path ?? ''));
-        const existing = runtime.map.entries.find((e) => e.path === path && e.type === 'blob');
+        const existing = runtime.blobsByPath.get(path);
         if (!existing) return fail(call, `Arquivo nao existe no repositorio: ${path}`);
         let previousContent: string | null = null;
         try {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildStatus,
   formatBytes,
-  isNewerBuild,
   parseCommit,
   parseVersion,
   type LatestBuild,
@@ -45,19 +45,21 @@ describe('parseVersion', () => {
   });
 });
 
-describe('isNewerBuild', () => {
+describe('buildStatus', () => {
   it('aponta novidade quando a versao publicada difere da instalada', () => {
-    expect(isNewerBuild(build({ version: '0.4.1' }), '0.4.0')).toBe(true);
+    expect(buildStatus(build({ version: '0.4.1' }), '0.4.0')).toBe('nova');
   });
 
-  it('nao aponta novidade quando a versao e a mesma', () => {
+  it('diz "atual" quando a versao e a mesma', () => {
     // A release `latest` reaponta a cada push na main sem mudar a versao;
     // tratar isso como novidade acenderia o alerta para sempre.
-    expect(isNewerBuild(build({ version: '0.4.0' }), '0.4.0')).toBe(false);
+    expect(buildStatus(build({ version: '0.4.0' }), '0.4.0')).toBe('atual');
   });
 
-  it('nao inventa novidade quando a versao publicada e desconhecida', () => {
-    expect(isNewerBuild(build({ version: null }), '0.4.0')).toBe(false);
+  it('separa "nao da para saber" de "esta atualizado"', () => {
+    // Colapsar os dois num booleano mostraria um selo verde de "atualizado"
+    // para um build que nem diz qual versao carrega.
+    expect(buildStatus(build({ version: null }), '0.4.0')).toBe('desconhecida');
   });
 });
 
