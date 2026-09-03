@@ -41,7 +41,6 @@ const {
   loadMemory,
   memoryUsage,
   recordMemory,
-  requestUnlimitedStorage,
   trimForMemory,
 } = await import('../memory/store');
 const { saveSettings } = await import('../storage');
@@ -92,11 +91,14 @@ describe('trimForMemory', () => {
 });
 
 describe('orcamento', () => {
-  it('limita a cota real quando a permissao nao foi concedida', async () => {
+  it('limita a cota real enquanto a permissao nao valer nesta instalacao', async () => {
+    // `unlimitedStorage` e' concedida na instalacao — o Chrome nao aceita
+    // pedi-la em runtime. Ate a extensao ser recarregada, o teto menor e' o
+    // lado seguro: estourar a cota derrubaria gravacoes de outras chaves.
     await saveSettings({ memoryBudgetBytes: 1_073_741_824 });
     expect(await effectiveBudgetBytes()).toBe(BUDGET_SEM_PERMISSAO_BYTES);
 
-    await requestUnlimitedStorage();
+    permissoes.add('unlimitedStorage');
     expect(await effectiveBudgetBytes()).toBe(1_073_741_824);
   });
 

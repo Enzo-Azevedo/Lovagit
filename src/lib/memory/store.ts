@@ -17,19 +17,23 @@ export const MIN_MEMORY_BUDGET_BYTES = 64 * 1024;
  */
 export const BUDGET_SEM_PERMISSAO_BYTES = 4 * 1024 * 1024;
 
+/**
+ * `unlimitedStorage` esta entre as permissoes que o Chrome NAO aceita como
+ * opcionais: ela e' concedida na instalacao ou nao existe. Pedi-la em runtime
+ * com `chrome.permissions.request` falha sempre — era por isso que o botao das
+ * configuracoes nao fazia nada.
+ *
+ * Por isso ela vive em `permissions` no manifest. Esta funcao continua existindo
+ * porque uma instalacao antiga so passa a ter a permissao depois de recarregar
+ * a extensao, e ate la o orcamento precisa se limitar sozinho.
+ */
 export async function hasUnlimitedStorage(): Promise<boolean> {
   try {
     return await chrome.permissions.contains({ permissions: ['unlimitedStorage'] });
-  } catch {
-    return false;
-  }
-}
-
-/** Pede a permissao. Precisa ser chamada a partir de um gesto do usuario. */
-export async function requestUnlimitedStorage(): Promise<boolean> {
-  try {
-    return await chrome.permissions.request({ permissions: ['unlimitedStorage'] });
-  } catch {
+  } catch (caught) {
+    // Sem a resposta do Chrome, assumir o teto menor e' o lado seguro do erro:
+    // estourar a cota derrubaria gravacoes que nao tem a ver com memoria.
+    console.warn('Nao foi possivel conferir a permissao de armazenamento', caught);
     return false;
   }
 }
@@ -131,11 +135,14 @@ export async function clearRepoMemory(repoId: RepoId): Promise<void> {
 
 async function carregarTudo(): Promise<Map<RepoId, MemoryEntry[]>> {
   const settings = await getSettings();
-  const porRepo = new Map<RepoId, MemoryEntry[]>();
-  for (const repoId of settings.connectedRepoIds) {
-    porRepo.set(repoId, await getMemoryEntries(repoId));
-  }
-  return porRepo;
+  // Uma leitura por repositorio, e elas nao dependem umas das outras: em serie,
+  // o custo era a soma; em paralelo, o do repositorio mais lento.
+  const carregadas = await Promise.all(
+    settings.connectedRepoIds.map(
+      async (repoId) => [repoId, await getMemoryEntries(repoId)] as const,
+    ),
+  );
+  return new Map(carregadas);
 }
 
 /**

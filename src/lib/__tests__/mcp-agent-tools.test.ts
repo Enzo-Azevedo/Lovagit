@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ContextIsolationError, createScope } from '../agent/isolation';
 import type { McpServerConfig } from '../mcp/types';
-import type { PendingFileChange, RepoMap, RepoRef, ToolCall } from '../types';
+import type { PendingFileChange, RepoMap, RepoRef, ToolCall, TreeEntry } from '../types';
 
 const callMcpTool = vi.hoisted(() =>
   vi.fn(async (_server: unknown, tool: string, args: Record<string, unknown>) => ({
@@ -42,6 +42,7 @@ function runtime(mcpServers: McpServerConfig[]) {
   return {
     scope: createScope(repo),
     map: { repoId: 'acme/site', entries: [], headSha: 'sha' } as unknown as RepoMap,
+    blobsByPath: new Map<string, TreeEntry>(),
     mcpServers,
     ref: 'sha',
     pending: new Map<string, PendingFileChange>(),

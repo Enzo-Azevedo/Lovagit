@@ -6,7 +6,6 @@ import {
   MIN_MEMORY_BUDGET_BYTES,
   hasUnlimitedStorage,
   memoryUsage,
-  requestUnlimitedStorage,
 } from '../lib/memory/store';
 import type { MemoryUsage } from '../lib/memory/types';
 
@@ -46,11 +45,6 @@ export function MemorySection() {
     await saveSettings({ memoryBudgetBytes: bytes });
     await recarregar();
   }, [budgetMb, recarregar]);
-
-  const pedirPermissao = useCallback(async () => {
-    await requestUnlimitedStorage();
-    await recarregar();
-  }, [recarregar]);
 
   return (
     <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
@@ -111,18 +105,15 @@ export function MemorySection() {
       ) : (
         <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2">
           <p className="text-[11px] text-amber-300">
-            Sem a permissao de armazenamento ilimitado, o Chrome da{' '}
-            {formatarBytes(10 * MB)} para TUDO que a extensao guarda — mapa, conversas,
-            historico. A memoria fica limitada a {formatarBytes(BUDGET_SEM_PERMISSAO_BYTES)}{' '}
-            para o resto continuar cabendo, independente do teto configurado acima.
+            A permissao de armazenamento ilimitado ainda nao esta ativa nesta instalacao. Ela e'
+            concedida na instalacao — o Chrome nao aceita pedi-la em tempo de execucao — entao
+            recarregue a extensao em <code>chrome://extensions</code> para que ela passe a valer.
           </p>
-          <button
-            type="button"
-            className="rounded-md border border-amber-500/40 px-2.5 py-1 text-xs text-amber-200 hover:bg-amber-500/10"
-            onClick={() => void pedirPermissao()}
-          >
-            Permitir armazenamento ilimitado
-          </button>
+          <p className="text-[10px] text-ink-400">
+            Ate la, a memoria se limita sozinha a {formatarBytes(BUDGET_SEM_PERMISSAO_BYTES)} dos{' '}
+            {formatarBytes(10 * MB)} que o Chrome da para TUDO que a extensao guarda — mapa,
+            conversas, historico. Passar disso faria a gravacao falhar.
+          </p>
         </div>
       )}
     </section>

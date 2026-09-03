@@ -178,13 +178,6 @@ export interface Settings {
    */
   memoryBudgetBytes: number;
   githubUser?: { login: string; avatarUrl: string } | null;
-  /**
-   * `unlimitedStorage` precisa de gesto do usuario para ser concedida; o pedido
-   * so pode ser feito de novo se o usuario agir. Este campo marca que a pergunta
-   * ja foi exibida uma vez no side panel — sem ele, o aviso apareceria em toda
-   * abertura ate o fim dos tempos.
-   */
-  unlimitedStorageAsked?: boolean;
 }
 
 export interface RateLimitInfo {

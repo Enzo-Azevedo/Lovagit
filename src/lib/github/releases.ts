@@ -7,9 +7,9 @@ import { getSecret, SecretNames } from '../vault';
 export const EXTENSION_REPO = 'Enzo-Azevedo/Lovagit';
 
 /**
- * A release rolante: sempre o ultimo build da `main`. Como o numero de versao
- * so muda quando alguem o incrementa, esta tag pode carregar a MESMA versao ja
- * instalada — por isso o que se compara aqui e' o commit, nao a versao.
+ * A release rolante: sempre o ultimo build da `main`. Ela reaponta a cada push,
+ * entao o commit muda o tempo todo e nao serve para dizer se ha novidade — o
+ * que se compara e' a versao do manifest que as notas do build anunciam.
  */
 export const LATEST_TAG = 'latest';
 
@@ -133,16 +133,23 @@ export async function fetchLatestBuild(options: { force?: boolean } = {}): Promi
 }
 
 /**
- * O build publicado e' diferente do que esta rodando aqui?
+ * Situacao do build publicado em relacao ao que esta rodando aqui.
  *
- * Compara COMMIT, nao versao: a release rolante reaponta a cada push na `main`,
- * mantendo o mesmo numero de versao na maior parte das vezes. Sem o commit do
- * build instalado (o caso de quem carregou a pasta descompactada), sobra a
- * versao — e no empate a resposta e' "nao da para saber", nunca um falso "ha
- * novidade" que apareceria para sempre.
+ * Sao tres estados, e nao um booleano: "nao da para saber" e' diferente de
+ * "esta atualizado". A release rolante nem sempre anuncia a versao nas notas, e
+ * tratar essa ausencia como "atualizado" mostraria um selo verde mentindo.
  */
-export function isNewerBuild(build: LatestBuild, installed = installedVersion()): boolean {
-  return build.version !== null && build.version !== installed;
+export type BuildStatus =
+  /** O build publicado anuncia uma versao diferente da instalada. */
+  | 'nova'
+  /** Mesma versao: nada a baixar. */
+  | 'atual'
+  /** O build nao diz qual versao carrega. */
+  | 'desconhecida';
+
+export function buildStatus(build: LatestBuild, installed = installedVersion()): BuildStatus {
+  if (build.version === null) return 'desconhecida';
+  return build.version === installed ? 'atual' : 'nova';
 }
 
 export function formatBytes(bytes: number): string {

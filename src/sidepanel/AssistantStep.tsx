@@ -1,6 +1,6 @@
 import type { ChatMessage, ToolResult } from '../lib/types';
 import { TOOL_LABEL, targetOfCall, visibleResult } from './toolTrace';
-import { RichText } from './ui';
+import { Markdown } from './Markdown';
 
 /**
  * Um passo do agente: o que ela pensou, o que ela disse e o que ela fez.
@@ -35,7 +35,13 @@ export function AssistantStep({
         </details>
       )}
 
-      {message.content && <RichText text={message.content} />}
+      {/* Superficie propria: o texto da IA nao pode flutuar sobre o vidro, onde
+          o brilho do cursor passando por tras mudava o contraste da frase. */}
+      {message.content && (
+        <div className="rounded-lg bg-ink-850 px-3 py-2">
+          <Markdown text={message.content} />
+        </div>
+      )}
 
       {chamadas.map((call) => {
         const result = results.get(call.id);
