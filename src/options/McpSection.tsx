@@ -73,7 +73,7 @@ export function McpSection() {
 
   return (
     <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
-      <h2 className="text-sm text-ink-200">5. Servidores MCP (ferramentas extras)</h2>
+      <h2 className="text-sm text-ink-200">6. Servidores MCP (ferramentas extras)</h2>
       <p className="text-[11px] text-ink-400">
         Servidores MCP dao ferramentas ao agente — consultar um banco, ler um projeto, abrir um
         chamado. Eles nao substituem o provedor de IA: o modelo continua vindo da chave configurada

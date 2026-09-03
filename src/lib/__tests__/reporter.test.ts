@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LABELS } from '../telemetry/types';
+import { ISSUE_TARGET_REPO, LABELS } from '../telemetry/types';
 
 /** Camada de rede mockada: os testes exercitam a politica, nao a API. */
 interface IssueInput {
@@ -310,5 +310,30 @@ describe('fila persistida', () => {
     await vi.advanceTimersByTimeAsync(50);
 
     expect(store.get('telemetry:pending')).toEqual({});
+  });
+});
+
+describe('destino do issue', () => {
+  it('e sempre o repositorio da extensao, e nao um campo que da para trocar', async () => {
+    // Como configuracao editavel isso so oferecia formas de quebrar: um
+    // repositorio onde o PAT nao tem `Issues: write` faz todo relato falhar em
+    // silencio, e um repositorio de terceiro receberia stack trace e caminho de
+    // arquivo de quem usa a extensao.
+    const { reporter } = await freshReporter();
+    await reporter.captureError(new TypeError('destino fixo'), { module: 'agent/loop' });
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(issues.ensureLabels).toHaveBeenCalledWith(ISSUE_TARGET_REPO);
+    expect(issues.createIssue.mock.calls[0][0]).toBe(ISSUE_TARGET_REPO);
+  });
+
+  it('ignora um `targetRepoId` que tenha sobrado de versao antiga no storage', async () => {
+    // Quem ja usava a extensao tem a chave gravada. Ela nao pode voltar a
+    // mandar relato para outro lugar so por continuar la.
+    const { reporter } = await freshReporter({ targetRepoId: 'terceiro/projeto' });
+    await reporter.captureError(new TypeError('storage antigo'), { module: 'agent/loop' });
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(issues.createIssue.mock.calls[0][0]).toBe(ISSUE_TARGET_REPO);
   });
 });

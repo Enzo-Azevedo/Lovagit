@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { isValidRepoId } from '../lib/storage';
+import { ISSUE_TARGET_REPO } from '../lib/telemetry/types';
 import {
   getReportLog,
   getTelemetrySettings,
@@ -24,12 +24,10 @@ const STATUS_STYLE: Record<LogEntry['status'], string> = {
 export function TelemetrySection() {
   const [settings, setSettings] = useState<TelemetrySettings | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
-  const [repoDraft, setRepoDraft] = useState('');
 
   const reload = useCallback(async () => {
     const loaded = await getTelemetrySettings();
     setSettings(loaded);
-    setRepoDraft(loaded.targetRepoId);
     setLog(await getReportLog());
   }, []);
 
@@ -45,11 +43,10 @@ export function TelemetrySection() {
   );
 
   if (!settings) return null;
-  const repoDraftValid = isValidRepoId(repoDraft.trim());
 
   return (
     <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
-      <h2 className="text-sm text-ink-200">4. Deteccao e relato de erros</h2>
+      <h2 className="text-sm text-ink-200">7. Deteccao e relato de erros</h2>
 
       <label className="flex items-start gap-2 text-xs text-ink-200">
         <input
@@ -71,29 +68,23 @@ export function TelemetrySection() {
       </label>
 
       <div className="grid grid-cols-3 gap-3">
-        <label className="col-span-3 block space-y-1">
+        <div className="col-span-3 space-y-1">
           <span className="block text-xs text-ink-200">Repositorio de destino</span>
-          <div className="flex gap-2">
-            <input
-              className={inputClass}
-              value={repoDraft}
-              onChange={(event) => setRepoDraft(event.target.value)}
-              placeholder="owner/nome"
-            />
-            <button
-              className="rounded-md bg-gradient-to-r from-lov-orange to-lov-pink px-3 py-1.5 text-xs font-medium text-lov-ink disabled:opacity-40"
-              disabled={!repoDraftValid || repoDraft.trim() === settings.targetRepoId}
-              onClick={() => void update({ targetRepoId: repoDraft.trim() })}
-            >
-              Salvar
-            </button>
-          </div>
+          <p className="rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 font-mono text-xs text-ink-400">
+            {ISSUE_TARGET_REPO} <span className="text-ink-600">(fixo)</span>
+          </p>
           <span className="block text-[11px] text-ink-400">
-            O PAT precisa de <code>Issues: Read and write</code> neste repositorio. Sem push access,
-            o GitHub descarta as labels em silencio — por isso a prioridade tambem vai escrita no
-            corpo do issue.
+            O destino nao e' configuravel: e' o repositorio da propria extensao. Apontar para outro
+            lugar so ofereceria formas de quebrar — um repositorio sem <code>Issues: write</code> no
+            seu PAT faria todo relato falhar em silencio, e um repositorio de terceiro receberia
+            stack traces e caminhos de arquivo seus.
           </span>
-        </label>
+          <span className="block text-[11px] text-ink-400">
+            O PAT precisa de <code>Issues: Read and write</code> nele. Sem push access, o GitHub
+            descarta as labels em silencio — por isso a prioridade tambem vai escrita no corpo do
+            issue.
+          </span>
+        </div>
 
         <label className="block space-y-1">
           <span className="block text-xs text-ink-200">Janela para cancelar (s)</span>

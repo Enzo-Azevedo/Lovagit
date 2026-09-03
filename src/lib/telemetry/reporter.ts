@@ -11,7 +11,13 @@ import {
   reopenIssue,
 } from './issues';
 import { browserSignature, hashRepoId, redactPath, redactStack, redactText } from './redact';
-import { DEFAULT_TELEMETRY, type ErrorContext, type ErrorReport, type TelemetrySettings } from './types';
+import {
+  DEFAULT_TELEMETRY,
+  ISSUE_TARGET_REPO,
+  type ErrorContext,
+  type ErrorReport,
+  type TelemetrySettings,
+} from './types';
 
 /**
  * Modulo de deteccao de erros.
@@ -297,7 +303,7 @@ async function dispatch(id: string): Promise<void> {
 
     if (!issueNumber) {
       // Dedupe entre maquinas: o marcador de fingerprint vive no corpo do issue.
-      const remote = await findIssueByFingerprint(settings.targetRepoId, report.fingerprint).catch(
+      const remote = await findIssueByFingerprint(ISSUE_TARGET_REPO, report.fingerprint).catch(
         () => null,
       );
       if (remote) {
@@ -305,14 +311,14 @@ async function dispatch(id: string): Promise<void> {
         issueUrl = remote.url;
         deduplicated = true;
         if (remote.state === 'closed') {
-          await reopenIssue(settings.targetRepoId, remote.number).catch(() => {});
+          await reopenIssue(ISSUE_TARGET_REPO, remote.number).catch(() => {});
         }
       }
     }
 
     if (issueNumber) {
       await commentOnIssue(
-        settings.targetRepoId,
+        ISSUE_TARGET_REPO,
         issueNumber,
         buildRecurrenceComment(report),
       );
@@ -330,8 +336,8 @@ async function dispatch(id: string): Promise<void> {
         });
         return;
       }
-      await ensureLabels(settings.targetRepoId);
-      const created = await createIssue(settings.targetRepoId, {
+      await ensureLabels(ISSUE_TARGET_REPO);
+      const created = await createIssue(ISSUE_TARGET_REPO, {
         title: buildIssueTitle(report),
         body: buildIssueBody(report, reason),
         labels: labelsFor(report),

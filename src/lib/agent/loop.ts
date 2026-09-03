@@ -18,6 +18,7 @@ import { buildSystemPrompt } from './prompt';
 import type { McpServerConfig } from '../mcp/types';
 import type { MemoryEntry } from '../memory/types';
 import type { NewMemoryEntry } from '../memory/store';
+import { extractRule } from '../memory/rules';
 import { buildToolSchemas, executeTool, indexBlobsByPath, type ToolRuntime } from './tools';
 
 /** Teto de idas e voltas com o modelo em um unico turno do usuario. */
@@ -172,6 +173,8 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
   const pending = new Map<string, PendingFileChange>();
   let committed: ApplyResult | null = null;
   let awaitingApproval: string | null = null;
+  /** O modelo ja registrou memoria neste turno? Se sim, o detector se cala. */
+  let lembrou = false;
   let ref = map.headSha;
 
   const runtime: ToolRuntime = {
@@ -198,6 +201,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       onEvent({ type: 'pending-changed', changes: [] });
     },
     onRemember: (summary, detail) => {
+      lembrou = true;
       onEvent({ type: 'memory', entry: { repoId, kind: 'decision', summary, detail } });
     },
     onAwaitingApproval: (message) => {
@@ -310,11 +314,23 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     onEvent({ type: 'awaiting-approval', commitMessage: null, changes: [...pending.values()] });
   }
 
-  // O pedido do usuario so vira memoria quando o turno teve consequencia. Turno
-  // de pergunta e resposta nao merece entrada: memoria cheia de ruido atrapalha
-  // tanto quanto memoria nenhuma. O que for digno de nota num turno assim, o
-  // modelo registra chamando `remember`.
-  if (committed !== null || pending.size > 0) {
+  // Regra dita pelo usuario vira memoria sozinha — ele nao precisa pedir "guarde
+  // isso". E vale mesmo em turno sem consequencia nenhuma: "sempre use aspas
+  // simples" nao muda arquivo hoje, e e' exatamente o que precisa valer amanha.
+  //
+  // A porta principal continua sendo o modelo chamando `remember`, com resumo
+  // melhor que qualquer recorte de texto; este caminho so cobre o turno em que
+  // ele nao chamou nada.
+  const regra = lembrou ? null : extractRule(options.userText);
+  if (regra !== null) {
+    onEvent({
+      type: 'memory',
+      entry: { repoId, kind: 'decision', summary: regra, detail: options.userText },
+    });
+  } else if (committed !== null || pending.size > 0) {
+    // Pedido comum so vira memoria quando o turno teve consequencia. Turno de
+    // pergunta e resposta nao merece entrada: memoria cheia de ruido atrapalha
+    // tanto quanto memoria nenhuma.
     onEvent({
       type: 'memory',
       entry: { repoId, kind: 'request', summary: options.userText, detail: options.userText },

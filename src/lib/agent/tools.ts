@@ -15,11 +15,14 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
   {
     name: 'remember',
     description:
-      'Grava um fato duradouro na memoria DESTE repositorio: uma decisao tomada, uma ' +
-      'convencao combinada, algo que o usuario recusou. Use com parcimonia — o que ' +
-      'vale e o que ainda sera verdade daqui a semanas. Nao registre o que ja ' +
-      'esta no codigo (isso se le com read_file), nem o passo a passo do que voce acabou ' +
-      'de fazer (commits ja entram na memoria sozinhos).',
+      'Grava um fato duradouro na memoria DESTE repositorio. Chame por conta propria, ' +
+      'sem esperar o usuario pedir "guarde isso": o gatilho e o usuario definir COMO as ' +
+      'coisas funcionam aqui — uma convencao ("sempre use X"), uma proibicao ("nunca ' +
+      'mexa em Y"), um padrao de nomenclatura, uma preferencia de estilo, uma decisao de ' +
+      'arquitetura, algo que ele recusou. Grave na mesma resposta em que ele disser. ' +
+      'Fora disso, parcimonia: nao registre a tarefa do dia ("ajuste o header agora"), ' +
+      'nem o que ja esta no codigo (isso se le com read_file), nem o passo a passo do que ' +
+      'voce acabou de fazer (commits ja entram na memoria sozinhos).',
     inputSchema: {
       type: 'object',
       properties: {

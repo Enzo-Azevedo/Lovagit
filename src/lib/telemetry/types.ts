@@ -72,16 +72,25 @@ export interface ReportOutcome {
 export interface TelemetrySettings {
   enabled: boolean;
   /** Repositorio destino dos issues, no formato owner/name. */
-  targetRepoId: RepoId;
   /** Segundos de janela para cancelar o envio. */
   undoSeconds: number;
   /** Teto de issues novos abertos por hora. */
   maxIssuesPerHour: number;
 }
 
+/**
+ * Destino fixo dos issues: o repositorio da propria extensao.
+ *
+ * E' uma constante, e nao uma configuracao, porque nao existe caso legitimo de
+ * apontar o relato de defeito da extensao para outro lugar. Como campo editavel
+ * ele so oferecia formas de quebrar: um repositorio onde o PAT nao tem
+ * `Issues: write` faz todo relato falhar, e um repositorio de terceiro receberia
+ * stack traces e caminhos de arquivo de quem usa a extensao.
+ */
+export const ISSUE_TARGET_REPO: RepoId = 'Enzo-Azevedo/Lovagit';
+
 export const DEFAULT_TELEMETRY: TelemetrySettings = {
   enabled: true,
-  targetRepoId: 'Enzo-Azevedo/Lovagit',
   undoSeconds: 10,
   maxIssuesPerHour: 5,
 };

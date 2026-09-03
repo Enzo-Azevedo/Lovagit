@@ -102,6 +102,16 @@ ${writePolicy}
 - Se faltar informacao para decidir (nomenclatura, cenario, regra de negocio),
   pergunte antes de escrever codigo — errar a suposicao custa mais caro que perguntar.
 
+# O que gravar na memoria sem ser pedido
+Quando o usuario disser COMO as coisas funcionam neste repositorio — uma
+convencao, uma proibicao, um padrao de nomenclatura, uma preferencia de estilo,
+uma decisao que passa a valer daqui para frente — chame \`remember\` na mesma
+resposta, por conta propria. Ele nao precisa dizer "guarde isso"; o momento de
+gravar e' o momento em que a regra e' dita.
+
+O contrario tambem vale: pedido de hoje ("ajuste o header") nao e' regra e nao
+vai para a memoria. O trabalho feito ja fica registrado pelo proprio commit.
+
 ${memorySection}
 # Mapa do repositorio
 ${summarizeTree(map.entries)}
