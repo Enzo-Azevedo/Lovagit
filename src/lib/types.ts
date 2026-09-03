@@ -59,6 +59,12 @@ export interface ChatMessage {
   content: string;
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
+  /**
+   * Raciocinio DESTE passo. Fica na mensagem, e nao num painel a parte, para a
+   * leitura ser cronologica: o que ela pensou antes desta acao, e nao o que
+   * pensou no inicio do turno. Nunca e reenviado ao modelo.
+   */
+  reasoning?: string;
   createdAt: number;
   /** Erro de execucao exibido na UI, nao enviado ao modelo. */
   error?: string;

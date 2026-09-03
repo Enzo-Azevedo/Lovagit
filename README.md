@@ -160,9 +160,25 @@ Modelos que separam raciocínio do conteúdo mandam a linha de pensamento em
 modelo encerrar produzindo **apenas** raciocínio, ele é exibido no chat com um
 aviso, em vez de o turno terminar em branco.
 
-O raciocínio aparece **enquanto chega**, num bloco discreto acima da resposta.
-Não é enfeite: em modelo lento, a fase de pensamento é justamente o trecho em
-que a tela fica parada e parece travada.
+O raciocínio aparece **enquanto chega** e depois fica guardado **no passo que o
+gerou**, não num painel único do turno. A leitura é cronológica: o que ela pensou
+antes de ler o arquivo aparece junto daquela leitura, não misturado com o
+pensamento inicial. Não é enfeite: em modelo lento, a fase de pensamento é
+justamente o trecho em que a tela fica parada e parece travada.
+
+O raciocínio é cortado em 4.000 caracteres por passo e **nunca é reenviado ao
+modelo** — ele já sabe o que pensou, e devolver o campo dobraria o custo do
+histórico (alguns provedores chegam a recusá-lo de volta).
+
+### Ações clicáveis
+
+Cada ação da IA é uma linha com o verbo e o alvo (`leu src/App.tsx`), e clicar
+abre o resultado: o conteúdo do arquivo que ela leu, o retorno da busca. O corte
+é em 20.000 caracteres — um `read_file` pode trazer 200 KB, e isso no DOM trava
+o painel.
+
+Antes a mesma ação aparecia duas vezes: uma linha com o caminho e uma badge só
+com o verbo, e o conteúdo não aparecia em lugar nenhum.
 
 No OpenRouter a extensão pede o raciocínio explicitamente (`reasoning:
 { enabled: true }`), porque um stream com tráfego é menos suscetível ao

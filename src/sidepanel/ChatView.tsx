@@ -25,8 +25,17 @@ import {
   savePendingChanges,
   saveRepoMap,
 } from '../lib/storage';
-import type { ChatMessage, Checkpoint, PendingFileChange, RepoRef, Settings } from '../lib/types';
+import type {
+  ChatMessage,
+  Checkpoint,
+  PendingFileChange,
+  RepoRef,
+  Settings,
+  ToolResult,
+} from '../lib/types';
+import { AssistantStep } from './AssistantStep';
 import { DiffView } from './DiffView';
+import { TOOL_LABEL } from './toolTrace';
 import { Button, ErrorNote, RichText, Spinner } from './ui';
 
 interface ChatViewProps {
@@ -40,16 +49,6 @@ const MEMORY_LABEL: Record<string, string> = {
   request: 'pedido',
   decision: 'decisao',
   action: 'alteracao',
-};
-
-const TOOL_LABEL: Record<string, string> = {
-  list_directory: 'listou',
-  read_file: 'leu',
-  search_code: 'buscou',
-  write_file: 'escreveu',
-  delete_file: 'removeu',
-  commit_changes: 'commitou',
-  remember: 'anotou',
 };
 
 export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatViewProps) {
@@ -72,6 +71,16 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   const [input, setInput] = useState('');
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Resultado de cada tool, indexado pelo id da chamada: e' assim que a linha
+  // da acao consegue abrir o conteudo do arquivo que ela leu.
+  const toolResults = useMemo(() => {
+    const porChamada = new Map<string, ToolResult>();
+    for (const message of messages) {
+      for (const result of message.toolResults ?? []) porChamada.set(result.toolCallId, result);
+    }
+    return porChamada;
+  }, [messages]);
 
   const activeProvider = useMemo(
     () => settings.providers.find((provider) => provider.id === settings.activeProviderId) ?? null,
@@ -411,6 +420,49 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {/* Historico colado no topo, fora do scroll: no fim da conversa ele ficava
+          longe justamente quando a conversa e longa — que e quando se quer
+          voltar para um backup. */}
+      {checkpoints.length > 0 && (
+        <details className="shrink-0 border-b border-ink-700 bg-ink-900">
+          <summary className="cursor-pointer px-3 py-1.5 text-[11px] text-ink-400">
+            Historico e backups ({checkpoints.length})
+          </summary>
+          <div className="max-h-64 space-y-2 overflow-y-auto border-t border-ink-700 p-2">
+            {checkpoints.map((checkpoint) => (
+              <div key={checkpoint.id} className="rounded-md border border-ink-700 p-2">
+                <p className="text-[11px] text-ink-200">{checkpoint.message.split('\n')[0]}</p>
+                <p className="font-mono text-[10px] text-ink-400">
+                  {checkpoint.commitSha.slice(0, 7)} · {checkpoint.files.length} arquivo(s) ·{' '}
+                  {new Date(checkpoint.createdAt).toLocaleString('pt-BR')}
+                </p>
+                <p className="truncate font-mono text-[10px] text-ink-400">
+                  backup: {checkpoint.backupBranch}
+                </p>
+                <div className="mt-1 flex gap-1">
+                  <Button
+                    variant="ghost"
+                    disabled={applying}
+                    onClick={() => void restore(checkpoint)}
+                    title={`Restaura ${repo.defaultBranch} para o estado da branch de backup`}
+                  >
+                    Voltar para este backup
+                  </Button>
+                  <a
+                    className="rounded-md px-2.5 py-1.5 text-xs text-ink-400 hover:text-ink-200"
+                    href={`${repo.htmlUrl}/commit/${checkpoint.commitSha}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Ver commit
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3">
         {messages.length === 0 && (
           <div className="rounded-lg border border-dashed border-ink-700 p-4 text-xs text-ink-400">
@@ -432,38 +484,21 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
               </div>
             );
           }
-          if (message.role === 'tool') {
-            return (
-              <div key={message.id} className="flex flex-wrap gap-1">
-                {(message.toolResults ?? []).map((result) => (
-                  <span
-                    key={result.toolCallId}
-                    title={result.content.slice(0, 400)}
-                    className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
-                      result.isError
-                        ? 'border-red-500/30 bg-red-500/10 text-red-300'
-                        : 'border-ink-700 bg-ink-900 text-ink-400'
-                    }`}
-                  >
-                    {TOOL_LABEL[result.name] ?? result.name}
-                  </span>
-                ))}
-              </div>
-            );
-          }
-          if (!message.content && !message.toolCalls) return null;
-          return (
-            <div key={message.id} className="space-y-1">
-              {message.content && <RichText text={message.content} />}
-            </div>
-          );
+          // O resultado nao tem bloco proprio: ele abre dentro da linha da
+          // acao que o gerou. A badge separada repetia o verbo sem dizer em
+          // qual arquivo, e o conteudo nao aparecia em lugar nenhum.
+          if (message.role === 'tool') return null;
+          return <AssistantStep key={message.id} message={message} results={toolResults} />;
         })}
 
         {/* Fase de pensamento: sem isso a tela fica parada em modelo lento, e e
             justamente nesse silencio que o intermediario derruba a conexao. */}
         {reasoning && !streaming && (
-          <div className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-lg border border-ink-700 bg-ink-900/60 p-2 font-mono text-[10px] leading-relaxed text-ink-400">
-            {reasoning}
+          <div className="rounded-md border border-ink-800 bg-ink-900/60">
+            <p className="px-2 py-1 text-[10px] text-ink-500">Raciocinando...</p>
+            <div className="max-h-32 overflow-y-auto whitespace-pre-wrap border-t border-ink-800 p-2 font-mono text-[10px] leading-relaxed text-ink-400">
+              {reasoning}
+            </div>
           </div>
         )}
         {streaming && <RichText text={streaming} />}
@@ -528,46 +563,6 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           </div>
         </details>
 
-        {checkpoints.length > 0 && (
-          <details className="rounded-lg border border-ink-700 bg-ink-900">
-            <summary className="cursor-pointer px-3 py-2 text-xs text-ink-400">
-              Historico e backups ({checkpoints.length})
-            </summary>
-            <div className="space-y-2 border-t border-ink-700 p-2">
-              {checkpoints.map((checkpoint) => (
-                <div key={checkpoint.id} className="rounded-md border border-ink-700 p-2">
-                  <p className="text-[11px] text-ink-200">{checkpoint.message.split('\n')[0]}</p>
-                  <p className="font-mono text-[10px] text-ink-400">
-                    {checkpoint.commitSha.slice(0, 7)} · {checkpoint.files.length} arquivo(s) ·{' '}
-                    {new Date(checkpoint.createdAt).toLocaleString('pt-BR')}
-                  </p>
-                  <p className="truncate font-mono text-[10px] text-ink-400">
-                    backup: {checkpoint.backupBranch}
-                  </p>
-                  <div className="mt-1 flex gap-1">
-                    <Button
-                      variant="ghost"
-                      disabled={applying}
-                      onClick={() => void restore(checkpoint)}
-                      title={`Restaura ${repo.defaultBranch} para o estado da branch de backup`}
-                    >
-                      Voltar para este backup
-                    </Button>
-                    <a
-                      className="rounded-md px-2.5 py-1.5 text-xs text-ink-400 hover:text-ink-200"
-                      href={`${repo.htmlUrl}/commit/${checkpoint.commitSha}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Ver commit
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
-
         {pending.length > 0 && (
           <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
             <div className="flex items-center justify-between">
@@ -608,7 +603,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
             ))}
             <p className="text-[10px] text-ink-400">
               Ao commitar, uma branch de backup da {repo.defaultBranch} e criada antes — da para
-              voltar depois pelo historico abaixo.
+              voltar depois pelo historico, no topo do painel.
             </p>
           </div>
         )}
