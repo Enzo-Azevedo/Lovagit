@@ -6,7 +6,12 @@ import { applyChangesToMap } from '../lib/github/mapper';
 import { getServersForRepo } from '../lib/mcp/registry';
 import { captureError } from '../lib/telemetry/reporter';
 import { RETRY_DELAY_SECONDS, shouldAutoRetry } from '../lib/agent/retry';
-import { clearRepoMemory, forgetMemoryEntry, loadMemory, recordMemory } from '../lib/memory/store';
+import {
+  clearRepoMemory,
+  forgetMemoryEntry,
+  loadMemory,
+  recordMemory,
+} from '../lib/memory/store';
 import type { MemoryEntry } from '../lib/memory/types';
 import { applyChanges, defaultCommitMessage, restoreCheckpoint } from '../lib/github/writer';
 import {
@@ -51,6 +56,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [pending, setPending] = useState<PendingFileChange[]>([]);
   const [memory, setMemory] = useState<MemoryEntry[]>([]);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingMessage, setPendingMessage] = useState('');
   const [streaming, setStreaming] = useState('');
@@ -81,6 +87,49 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     [settings],
   );
 
+  /** Grava um fato e recarrega o painel. Falha de gravacao (cota, por exemplo)
+   *  nao pode sumir em silencio: memoria que nao grava e' pior que nenhuma. */
+  const persistMemory = useCallback(
+    async (entry: Parameters<typeof recordMemory>[0]) => {
+      try {
+        await recordMemory(entry);
+        setMemory(await loadMemory(repo.id));
+        setMemoryError(null);
+      } catch (caught) {
+        const message = caught instanceof Error ? caught.message : String(caught);
+        setMemoryError(`A memoria nao foi gravada: ${message}`);
+        void captureError(caught, {
+          module: 'sidepanel/ChatView',
+          repoId: repo.id,
+          step: 'memoria',
+        });
+      }
+    },
+    [repo.id],
+  );
+
+  const forgetEntry = useCallback(
+    async (id: string) => {
+      try {
+        setMemory(await forgetMemoryEntry(repo.id, id));
+        setMemoryError(null);
+      } catch (caught) {
+        setMemoryError(caught instanceof Error ? caught.message : String(caught));
+      }
+    },
+    [repo.id],
+  );
+
+  const forgetAll = useCallback(async () => {
+    try {
+      await clearRepoMemory(repo.id);
+      setMemory([]);
+      setMemoryError(null);
+    } catch (caught) {
+      setMemoryError(caught instanceof Error ? caught.message : String(caught));
+    }
+  }, [repo.id]);
+
   // Troca de repositorio = troca completa de estado. Nada e' reaproveitado.
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +140,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     setReasoning('');
     setRetry(null);
     setMemory([]);
+    setMemoryError(null);
     setMemoryOpen(false);
     setError(null);
     void (async () => {
@@ -171,9 +221,9 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         history = await getChat(repo.id);
         // So os servidores MCP habilitados para ESTE repositorio.
         const mcpServers = await getServersForRepo(repo.id);
-      // Le a memoria ANTES do turno: o que for gravado agora vale do proximo em
-      // diante, para o modelo nunca ver o proprio registro no mesmo prompt.
-      const memoriaAtual = await loadMemory(repo.id);
+        // Le a memoria ANTES do turno: o que for gravado agora vale do proximo em
+        // diante, para o modelo nunca ver o proprio registro no mesmo prompt.
+        const memoriaAtual = await loadMemory(repo.id);
 
         const onEvent = (event: AgentEvent) => {
           switch (event.type) {
@@ -193,7 +243,9 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
               setMessages((prev) => [...prev, event.message]);
               break;
             case 'tool-start':
-              setStatus(`${TOOL_LABEL[event.call.name] ?? event.call.name} ${String(event.call.input.path ?? event.call.input.query ?? '')}`);
+              setStatus(
+                `${TOOL_LABEL[event.call.name] ?? event.call.name} ${String(event.call.input.path ?? event.call.input.query ?? '')}`,
+              );
               break;
             case 'pending-changed':
               for (const change of event.changes) collectedChanges.set(change.path, change);
@@ -213,10 +265,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
               break;
             }
             case 'memory':
-              // Grava e recarrega: o painel mostra o que a IA acabou de anotar.
-              void recordMemory(event.entry).then(async () => {
-                setMemory(await loadMemory(repo.id));
-              });
+              void persistMemory(event.entry);
               break;
             case 'committed':
               commitouNesteTurno = true;
@@ -279,7 +328,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         abortRef.current = null;
       }
     },
-    [activeProvider, persistCheckpoint, repo, running, settings],
+    [activeProvider, persistCheckpoint, persistMemory, repo, running, settings],
   );
 
   // `runTurn` muda de identidade a cada render; a contagem do reenvio nao pode
@@ -465,54 +514,54 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           </div>
         )}
 
-        {memory.length > 0 && (
-          <details
-            className="rounded-lg border border-ink-700 bg-ink-900"
-            open={memoryOpen}
-            onToggle={(event) => setMemoryOpen(event.currentTarget.open)}
-          >
-            <summary className="cursor-pointer px-3 py-2 text-xs text-ink-400">
-              Memoria deste repositorio ({memory.length})
-            </summary>
-            <div className="space-y-2 border-t border-ink-700 p-2">
+        <details
+          className="rounded-lg border border-ink-700 bg-ink-900"
+          open={memoryOpen}
+          onToggle={(event) => setMemoryOpen(event.currentTarget.open)}
+        >
+          <summary className="cursor-pointer px-3 py-2 text-xs text-ink-400">
+            Memoria deste repositorio ({memory.length})
+          </summary>
+          <div className="space-y-2 border-t border-ink-700 p-2">
+            {memoryError && <ErrorNote>{memoryError}</ErrorNote>}
+            {memory.length === 0 ? (
               <p className="text-[10px] text-ink-400">
-                O que a IA leva para as proximas conversas. Se alguma linha estiver errada,
-                apague: memoria errada e repetida em todo prompt, e ai atrapalha mais do que
-                ajuda.
+                Nada guardado ainda. A memoria enche quando um pedido seu vira alteracao
+                commitada, ou quando a IA anota uma decisao no meio do caminho.
               </p>
-              {[...memory].reverse().map((entry) => (
-                <div key={entry.id} className="rounded-md border border-ink-700 p-2">
-                  <p className="text-[11px] text-ink-200">{entry.summary}</p>
-                  <p className="font-mono text-[10px] text-ink-400">
-                    {MEMORY_LABEL[entry.kind]} ·{' '}
-                    {new Date(entry.createdAt).toLocaleDateString('pt-BR')}
-                    {entry.level > 0 && ' · comprimida'}
-                    {entry.refs?.commitSha ? ` · ${entry.refs.commitSha.slice(0, 7)}` : ''}
-                  </p>
-                  {entry.detail && entry.detail !== entry.summary && (
-                    <p className="mt-1 text-[10px] text-ink-400">{entry.detail}</p>
-                  )}
-                  <div className="mt-1">
-                    <Button
-                      variant="ghost"
-                      onClick={() =>
-                        void forgetMemoryEntry(repo.id, entry.id).then(setMemory)
-                      }
-                    >
-                      Esquecer
-                    </Button>
+            ) : (
+              <>
+                <p className="text-[10px] text-ink-400">
+                  O que a IA leva para as proximas conversas. Se alguma linha estiver errada,
+                  apague: memoria errada e repetida em todo prompt, e ai atrapalha mais do que
+                  ajuda.
+                </p>
+                {[...memory].reverse().map((entry) => (
+                  <div key={entry.id} className="rounded-md border border-ink-700 p-2">
+                    <p className="text-[11px] text-ink-200">{entry.summary}</p>
+                    <p className="font-mono text-[10px] text-ink-400">
+                      {MEMORY_LABEL[entry.kind]} ·{' '}
+                      {new Date(entry.createdAt).toLocaleDateString('pt-BR')}
+                      {entry.level > 0 && ' · comprimida'}
+                      {entry.refs?.commitSha ? ` · ${entry.refs.commitSha.slice(0, 7)}` : ''}
+                    </p>
+                    {entry.detail && entry.detail !== entry.summary && (
+                      <p className="mt-1 text-[10px] text-ink-400">{entry.detail}</p>
+                    )}
+                    <div className="mt-1">
+                      <Button variant="ghost" onClick={() => void forgetEntry(entry.id)}>
+                        Esquecer
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
-              <Button
-                variant="ghost"
-                onClick={() => void clearRepoMemory(repo.id).then(() => setMemory([]))}
-              >
-                Esquecer tudo deste repositorio
-              </Button>
-            </div>
-          </details>
-        )}
+                ))}
+                <Button variant="ghost" onClick={() => void forgetAll()}>
+                  Esquecer tudo deste repositorio
+                </Button>
+              </>
+            )}
+          </div>
+        </details>
 
         {pending.length > 0 && (
           <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
