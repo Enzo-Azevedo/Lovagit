@@ -39,6 +39,46 @@ describe('parseSpans', () => {
     expect(juntos).toContain('javascript:alert(1');
   });
 
+  it('nao italiciza o meio de um identificador', () => {
+    // Numa extensao que fala de codigo, `MAX_READ_BYTES` aparece toda hora; sem
+    // esta regra o nome saia como MAX + READ em italico + BYTES. O CommonMark
+    // trata igual: `_` so abre enfase fora de palavra.
+    expect(parseSpans('use MAX_READ_BYTES aqui')).toEqual([
+      { kind: 'text', text: 'use MAX_READ_BYTES aqui' },
+    ]);
+    expect(parseSpans('o campo created_at do banco')).toEqual([
+      { kind: 'text', text: 'o campo created_at do banco' },
+    ]);
+  });
+
+  it('mas `__dunder__` continua virando negrito, como manda o CommonMark', () => {
+    // Aqui os dois delimitadores estao em fronteira de palavra, entao a enfase
+    // e' legitima pela especificacao. Nao vale inventar um dialeto proprio: o
+    // modelo escreve identificador entre crases, e ali nada e' interpretado.
+    expect(parseSpans('o metodo __init__ da classe')).toEqual([
+      { kind: 'text', text: 'o metodo ' },
+      { kind: 'strong', text: 'init' },
+      { kind: 'text', text: ' da classe' },
+    ]);
+    expect(parseSpans('o metodo `__init__` da classe')).toEqual([
+      { kind: 'text', text: 'o metodo ' },
+      { kind: 'code', text: '__init__' },
+      { kind: 'text', text: ' da classe' },
+    ]);
+  });
+
+  it('mas continua reconhecendo enfase com _ entre palavras', () => {
+    expect(parseSpans('isto e _importante_ mesmo')).toEqual([
+      { kind: 'text', text: 'isto e ' },
+      { kind: 'em', text: 'importante' },
+      { kind: 'text', text: ' mesmo' },
+    ]);
+    expect(parseSpans('__forte__ no comeco')).toEqual([
+      { kind: 'strong', text: 'forte' },
+      { kind: 'text', text: ' no comeco' },
+    ]);
+  });
+
   it('texto sem marcacao sai inteiro, sem virar lista vazia', () => {
     expect(parseSpans('so texto')).toEqual([{ kind: 'text', text: 'so texto' }]);
     expect(parseSpans('')).toEqual([{ kind: 'text', text: '' }]);

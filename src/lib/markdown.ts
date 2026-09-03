@@ -60,13 +60,22 @@ const SAFE_LINK = /^https?:\/\//i;
 /**
  * Quebra uma linha em trechos formatados.
  *
- * A ordem importa: `code` vem primeiro porque o que esta dentro de crase e'
- * literal — `` `**x**` `` mostra os asteriscos em vez de negritar.
+ * Duas coisas guiam a expressao:
+ *
+ * 1. **`code` vem primeiro.** O que esta dentro de crase e' literal —
+ *    `` `**x**` `` mostra os asteriscos em vez de negritar.
+ * 2. **`_` nao vale dentro de palavra.** Sem essa restricao,
+ *    `MAX_READ_BYTES` sairia como `MAX` + *READ* em italico + `BYTES` — e numa
+ *    extensao que fala de codigo isso apareceria em quase toda resposta. O
+ *    CommonMark trata igual: `_` so abre e fecha enfase fora de palavra; `*`
+ *    continua valendo em qualquer posicao. `__dunder__` entre espacos continua
+ *    virando negrito, tambem como manda a especificacao — nao vale inventar um
+ *    dialeto proprio, e identificador o modelo escreve entre crases.
  */
 export function parseSpans(line: string): Span[] {
   const spans: Span[] = [];
   const padrao =
-    /`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*\n]+)\*|_([^_\n]+)_|\[([^\]]+)\]\(([^)\s]+)\)/g;
+    /`([^`]+)`|\*\*([^*]+)\*\*|(?<![A-Za-z0-9])__([^_]+)__(?![A-Za-z0-9])|\*([^*\n]+)\*|(?<![A-Za-z0-9])_([^_\n]+)_(?![A-Za-z0-9])|\[([^\]]+)\]\(([^)\s]+)\)/g;
 
   let ultimo = 0;
   for (let m = padrao.exec(line); m !== null; m = padrao.exec(line)) {
