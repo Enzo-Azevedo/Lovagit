@@ -12,6 +12,15 @@ import { buildToolSchemas, executeTool, type ToolRuntime } from './tools';
 const MAX_STEPS = 16;
 /** Mensagens de historico enviadas ao modelo (as mais recentes). */
 const HISTORY_WINDOW = 60;
+/** Teto do raciocinio guardado por passo. So a exibicao usa isso. */
+const MAX_REASONING_CHARS = 4000;
+
+function trimReasoning(reasoning: string | undefined): string | undefined {
+  if (!reasoning) return undefined;
+  return reasoning.length <= MAX_REASONING_CHARS
+    ? reasoning
+    : `${reasoning.slice(0, MAX_REASONING_CHARS)}\n... (raciocinio truncado)`;
+}
 
 export type AgentEvent =
   | { type: 'status'; text: string }
@@ -190,12 +199,13 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       id: newId('msg'),
       repoId,
       role: 'assistant',
-      // Modelo de raciocinio que nao produziu resposta final: mostrar o
-      // raciocinio e melhor do que mostrar nada.
+      // Modelo de raciocinio que nao produziu resposta final: o raciocinio fica
+      // no campo proprio, logo acima, entao aqui basta explicar o que houve.
       content:
         silentTurn && response.reasoning
-          ? `(o modelo nao produziu resposta final — abaixo o raciocinio que ele devolveu)\n\n${response.reasoning}`
+          ? '(o modelo nao produziu resposta final — o raciocinio dele esta acima)'
           : response.text,
+      reasoning: trimReasoning(response.reasoning),
       toolCalls: response.toolCalls.length > 0 ? response.toolCalls : undefined,
       createdAt: Date.now(),
     };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { runAgent, type AgentEvent } from '../agent/loop';
+import { historyToTurns, runAgent, type AgentEvent } from '../agent/loop';
 import { createScope } from '../agent/isolation';
 import type { AIProvider, CompletionResponse } from '../ai/types';
 import type { RepoMap, RepoRef } from '../types';
@@ -59,7 +59,7 @@ async function run(provider: AIProvider) {
     autoApply: false,
     connectedRepoIds: ['acme/site'],
     mcpServers: [],
-      memory: [],
+    memory: [],
     onEvent: (event) => events.push(event),
   });
   return { events, messages };
@@ -79,8 +79,10 @@ describe('turno vazio', () => {
       providerReturning({ reasoning: 'preciso ler mais arquivos antes de responder' }),
     );
 
+    // O raciocinio fica no campo proprio, para a interface poder mostra-lo no
+    // lugar cronologico; o conteudo so explica por que nao veio resposta.
     const assistente = messages.find((message) => message.role === 'assistant');
-    expect(assistente?.content).toContain('preciso ler mais arquivos');
+    expect(assistente?.reasoning).toContain('preciso ler mais arquivos');
     expect(assistente?.content).toContain('nao produziu resposta final');
 
     const erro = events.find((event) => event.type === 'error');
@@ -90,5 +92,50 @@ describe('turno vazio', () => {
   it('nao avisa nada quando o modelo responde normalmente', async () => {
     const { events } = await run(providerReturning({ text: 'aqui vai o resumo do repositorio' }));
     expect(events.find((event) => event.type === 'error')).toBeUndefined();
+  });
+});
+
+describe('raciocinio por passo', () => {
+  it('fica na mensagem do passo, ao lado da resposta', async () => {
+    const { messages } = await run(
+      providerReturning({ text: 'pronto', reasoning: 'vou olhar o header primeiro' }),
+    );
+
+    const assistente = messages.find((message) => message.role === 'assistant');
+    expect(assistente?.reasoning).toBe('vou olhar o header primeiro');
+    expect(assistente?.content).toBe('pronto');
+  });
+
+  it('nao guarda raciocinio quando o modelo nao mandou nenhum', async () => {
+    const { messages } = await run(providerReturning({ text: 'pronto' }));
+    expect(messages.find((message) => message.role === 'assistant')?.reasoning).toBeUndefined();
+  });
+
+  it('trunca raciocinio gigante — ele e para ler, nao para encher o storage', async () => {
+    const { messages } = await run(
+      providerReturning({ text: 'pronto', reasoning: 'p'.repeat(50_000) }),
+    );
+
+    const raciocinio = messages.find((m) => m.role === 'assistant')?.reasoning ?? '';
+    expect(raciocinio.length).toBeLessThan(5000);
+    expect(raciocinio).toContain('truncado');
+  });
+
+  it('NAO reenvia o raciocinio ao modelo', () => {
+    // Reenviar dobraria o custo do historico sem ajudar: o modelo ja sabe o que
+    // pensou, e alguns provedores recusam o campo de volta.
+    const turnos = historyToTurns([
+      { id: '1', repoId: 'acme/site', role: 'user', content: 'ajuste o header', createdAt: 0 },
+      {
+        id: '2',
+        repoId: 'acme/site',
+        role: 'assistant',
+        content: 'feito',
+        reasoning: 'PENSAMENTO_QUE_NAO_PODE_VOLTAR',
+        createdAt: 1,
+      },
+    ]);
+
+    expect(JSON.stringify(turnos)).not.toContain('PENSAMENTO_QUE_NAO_PODE_VOLTAR');
   });
 });
