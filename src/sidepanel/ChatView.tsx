@@ -32,10 +32,13 @@ import type {
   RepoRef,
   Settings,
   ToolResult,
+  TurnImage,
 } from '../lib/types';
+import { detectVisionSupport, describeVision, type VisionSupport } from '../lib/ai/vision';
 import { AssistantStep } from './AssistantStep';
 import { DiffView } from './DiffView';
 import { TOOL_LABEL } from './toolTrace';
+import { toPreviewUrl, toTurnImages, useAttachments } from './useAttachments';
 import { Button, ErrorNote, RichText, Spinner } from './ui';
 
 interface ChatViewProps {
@@ -63,7 +66,11 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   /** Raciocinio do turno em andamento — some assim que a resposta chega. */
   const [reasoning, setReasoning] = useState('');
   /** Reenvio automatico agendado: texto original e segundos restantes. */
-  const [retry, setRetry] = useState<{ text: string; secondsLeft: number } | null>(null);
+  const [retry, setRetry] = useState<{
+    text: string;
+    images: TurnImage[];
+    secondsLeft: number;
+  } | null>(null);
   const [status, setStatus] = useState('');
   const [running, setRunning] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -71,6 +78,11 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   const [input, setInput] = useState('');
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { attachments, attachError, addFiles, addFromClipboard, remove, clear } =
+    useAttachments();
+  /** O modelo ativo enxerga imagem? `unknown` = nao da para afirmar. */
+  const [vision, setVision] = useState<VisionSupport>('unknown');
 
   // Resultado de cada tool, indexado pelo id da chamada: e' assim que a linha
   // da acao consegue abrir o conteudo do arquivo que ela leu.
@@ -86,6 +98,22 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     () => settings.providers.find((provider) => provider.id === settings.activeProviderId) ?? null,
     [settings],
   );
+
+  // Descobre o suporte a imagem do modelo ativo. Roda na troca de provedor, e
+  // nao no envio, para o aviso estar na tela ANTES de voce anexar.
+  useEffect(() => {
+    let cancelado = false;
+    if (!activeProvider) {
+      setVision('unknown');
+      return;
+    }
+    void detectVisionSupport(activeProvider).then((suporte) => {
+      if (!cancelado) setVision(suporte);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [activeProvider]);
 
   /** Grava um fato e recarrega o painel. Falha de gravacao (cota, por exemplo)
    *  nao pode sumir em silencio: memoria que nao grava e' pior que nenhuma. */
@@ -184,12 +212,24 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
       await clearPendingChanges(repo.id);
       setPending([]);
       setPendingMessage('');
+      // Unico ponto onde um commit vira memoria. Passam por aqui tanto o
+      // commit do agente quanto o aprovado no botao — e o segundo, que e' o
+      // caminho de quem revisa antes de commitar, nao gravava nada.
+      await persistMemory({
+        repoId: repo.id,
+        kind: 'action',
+        summary: checkpoint.message.split('\n')[0],
+        refs: {
+          commitSha: checkpoint.commitSha,
+          paths: changes.map((change) => change.path),
+        },
+      });
     },
-    [repo.id],
+    [persistMemory, repo.id],
   );
 
   const runTurn = useCallback(
-    async (text: string, reenvioAutomatico = false) => {
+    async (text: string, reenvioAutomatico = false, imagens: TurnImage[] = []) => {
       if (!text || running) return;
       if (!activeProvider) {
         setError('Nenhuma IA conectada. Configure um provedor nas configuracoes.');
@@ -286,6 +326,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           map,
           history,
           userText: text,
+          images: imagens,
           provider,
           autoApply: settings.autoApplyChanges,
           connectedRepoIds: settings.connectedRepoIds,
@@ -314,7 +355,9 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
             committed: commitouNesteTurno,
           })
         ) {
-          setRetry({ text, secondsLeft: RETRY_DELAY_SECONDS });
+          // O reenvio leva as MESMAS imagens: sem isso a segunda tentativa
+        // mandaria a pergunta sem a tela sobre a qual ela fala.
+        setRetry({ text, images: imagens, secondsLeft: RETRY_DELAY_SECONDS });
         }
       } finally {
         // Cancelar ou falhar no meio nao pode apagar o que ja foi dito no chat.
@@ -342,7 +385,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     if (!retry) return;
     if (retry.secondsLeft <= 0) {
       setRetry(null);
-      void runTurnRef.current(retry.text, true);
+      void runTurnRef.current(retry.text, true, retry.images);
       return;
     }
     const timer = setTimeout(() => {
@@ -351,14 +394,20 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     return () => clearTimeout(timer);
   }, [retry]);
 
+  /** Modelo que comprovadamente nao le imagem nao recebe anexo: a chamada
+   *  falharia, ou pior, ele responderia ignorando a imagem sem dizer nada. */
+  const blockedByVision = attachments.length > 0 && vision === 'no';
+
   const send = useCallback(() => {
     const text = input.trim();
-    if (!text || running) return;
+    if (!text || running || blockedByVision) return;
     // Mandar na mao cancela um reenvio agendado: quem manda e o usuario.
     setRetry(null);
     setInput('');
-    void runTurn(text);
-  }, [input, runTurn, running]);
+    const imagens = toTurnImages(attachments);
+    clear();
+    void runTurn(text, false, imagens);
+  }, [attachments, blockedByVision, clear, input, runTurn, running]);
 
   const approvePending = useCallback(async () => {
     if (pending.length === 0) return;
@@ -398,6 +447,15 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         const result = await restoreCheckpoint(repo, checkpoint);
         const next = await addCheckpoint(result.checkpoint);
         setCheckpoints(next);
+        // Sem isto a memoria continuaria afirmando que um trabalho existe
+        // depois de ele ter sido desfeito — memoria que mente e' pior que
+        // memoria vazia.
+        await persistMemory({
+          repoId: repo.id,
+          kind: 'action',
+          summary: `Restaurada a ${repo.defaultBranch} para o backup ${checkpoint.backupBranch}`,
+          refs: { commitSha: result.checkpoint.commitSha },
+        });
         onRemap();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught));
@@ -410,7 +468,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         setApplying(false);
       }
     },
-    [onRemap, repo],
+    [onRemap, persistMemory, repo],
   );
 
   const clearChat = useCallback(async () => {
@@ -424,7 +482,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           longe justamente quando a conversa e longa — que e quando se quer
           voltar para um backup. */}
       {checkpoints.length > 0 && (
-        <details className="shrink-0 border-b border-ink-700 bg-ink-900">
+        <details className="glass shrink-0 border-b border-ink-700 bg-ink-900">
           <summary className="cursor-pointer px-3 py-1.5 text-[11px] text-ink-400">
             Historico e backups ({checkpoints.length})
           </summary>
@@ -467,7 +525,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           um trecho da conversa. Dentro do scroll ela subia junto com as
           mensagens e deixava de estar a um clique. */}
       <details
-        className="shrink-0 border-b border-ink-700 bg-ink-900"
+        className="glass shrink-0 border-b border-ink-700 bg-ink-900"
         open={memoryOpen}
         onToggle={(event) => setMemoryOpen(event.currentTarget.open)}
       >
@@ -533,6 +591,11 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
             return (
               <div key={message.id} className="ml-6 rounded-lg bg-ink-800 px-3 py-2">
                 <RichText text={message.content} />
+                {(message.attachments ?? []).length > 0 && (
+                  <p className="mt-1 font-mono text-[10px] text-ink-400">
+                    {message.attachments?.length} imagem(ns) enviada(s) neste turno
+                  </p>
+                )}
               </div>
             );
           }
@@ -612,7 +675,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         )}
       </div>
 
-      <div className="border-t border-ink-700 bg-ink-900 p-2">
+      <div className="glass border-t border-ink-700 bg-ink-900 p-2">
         {!activeProvider && (
           <div className="mb-2 flex items-center justify-between rounded-md border border-ink-700 bg-ink-800 px-2 py-1.5 text-[11px] text-ink-400">
             Nenhuma IA conectada.
@@ -621,9 +684,52 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
             </Button>
           </div>
         )}
+        {attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((anexo) => (
+              <div
+                key={anexo.id}
+                className="group relative h-16 w-16 overflow-hidden rounded-md border border-ink-700"
+                title={`${anexo.name} · ${Math.round(anexo.bytes / 1024)} KB`}
+              >
+                <img src={toPreviewUrl(anexo)} alt={anexo.name} className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  aria-label={`Remover ${anexo.name}`}
+                  onClick={() => remove(anexo.id)}
+                  className="absolute right-0 top-0 bg-ink-950/80 px-1 text-[10px] text-ink-200 opacity-0 transition-opacity group-hover:opacity-100"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {attachError && (
+          <p className="mb-2 text-[10px] text-red-300">{attachError}</p>
+        )}
+
+        {attachments.length > 0 && describeVision(vision, activeProvider?.model ?? 'o modelo') && (
+          <p
+            className={`mb-2 text-[10px] ${
+              vision === 'no' ? 'text-red-300' : 'text-lov-orange'
+            }`}
+          >
+            {describeVision(vision, activeProvider?.model ?? 'o modelo')}
+          </p>
+        )}
+
         <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          onPaste={(event) => {
+            // Colar uma captura de tela e' o caminho mais curto; se houve
+            // imagem no clipboard, ela vira anexo em vez de texto.
+            void addFromClipboard(event.clipboardData?.items ?? null).then((usou) => {
+              if (usou) event.preventDefault();
+            });
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
@@ -634,11 +740,31 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           placeholder={`O que voce quer mudar em ${repo.name}?`}
           className="w-full resize-none rounded-md border border-ink-700 bg-ink-950 p-2 text-[13px] text-ink-200 outline-none placeholder:text-ink-600 focus:border-ink-600"
         />
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            void addFiles(Array.from(event.target.files ?? []));
+            event.target.value = '';
+          }}
+        />
         <div className="mt-1.5 flex items-center justify-between">
           <span className="truncate font-mono text-[10px] text-ink-400">
             {activeProvider ? `${activeProvider.label} · ${activeProvider.model}` : 'sem IA'}
           </span>
           <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              disabled={running}
+              title="Anexar imagem (ou cole uma captura de tela)"
+              onClick={() => fileRef.current?.click()}
+            >
+              Anexar
+            </Button>
             <Button variant="ghost" onClick={() => void clearChat()} disabled={running}>
               Limpar
             </Button>
@@ -653,7 +779,16 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
                 Parar
               </Button>
             ) : (
-              <Button variant="primary" onClick={() => void send()} disabled={!input.trim()}>
+              <Button
+                variant="primary"
+                onClick={() => void send()}
+                disabled={!input.trim() || blockedByVision}
+                title={
+                  blockedByVision
+                    ? `${activeProvider?.model ?? 'O modelo'} nao le imagens`
+                    : undefined
+                }
+              >
                 Enviar
               </Button>
             )}

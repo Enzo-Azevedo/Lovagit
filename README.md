@@ -98,6 +98,26 @@ Baixe o zip, extraia e carregue a pasta em `chrome://extensions`.
 > permissões de workflow em modo leitura: **Settings → Actions → General →
 > Workflow permissions → Read and write permissions**.
 
+### Atualizar a partir do próprio painel
+
+A faixa no topo do side panel mostra a versão instalada e o último build
+publicado da `main`, com um botão que abre o zip numa guia nova. Quando a versão
+publicada difere da instalada, a faixa acende nas cores da marca.
+
+A comparação é por **versão anunciada nas notas do build**, não pelo commit: a
+release `latest` reaponta a cada push na `main` mantendo o mesmo número, então
+comparar commits acenderia o alerta para sempre. Sem versão nas notas, a faixa
+fica neutra — nunca inventa novidade.
+
+A resposta do GitHub é cacheada por 6 horas, e a chamada funciona **sem PAT**
+(o repositório é público) — quem ainda não configurou o token também precisa
+conseguir atualizar.
+
+> **Por que não atualiza sozinha.** O MV3 proíbe código remoto, e extensão
+> carregada sem compactação nunca se auto-atualiza. Atualização automática de
+> verdade exigiria publicar na Chrome Web Store. Apontar o download é o máximo
+> honesto daqui.
+
 Clique no ícone da extensão para abrir o side panel.
 
 > Também funciona em Edge, Brave e Opera (mesma base Chromium). Firefox não é
@@ -260,7 +280,7 @@ conversas seguintes.
 
 | Tipo | Quem grava | Quando |
 |---|---|---|
-| `action` | a extensão, sozinha | a cada commit aplicado (fato do repositório, sem o modelo interpretar nada) |
+| `action` | a extensão, sozinha | a cada commit aplicado **e a cada restauração de backup**, pelos dois caminhos: o commit do agente e o aprovado no botão |
 | `request` | a extensão, sozinha | seu pedido, **apenas quando o turno teve consequência** — mexeu em arquivo |
 | `decision` | o modelo, pela ferramenta `remember` | algo combinado ou recusado que ainda valerá daqui a semanas |
 
@@ -274,6 +294,13 @@ ordem cronológica. O que limita aqui não é o disco, é a janela de contexto d
 modelo — memória demais no prompt empurra para fora o código que ele precisa ler.
 O recorte vem com duas regras explícitas para o modelo: **o código vence a
 memória** (ela pode estar velha) e **pedido antigo registrado não é ordem**.
+
+**Um único escritor.** O commit vira memória em `persistCheckpoint`, por onde
+passam tanto o commit do agente quanto o aprovado no botão. Até a v0.3.9 quem
+gravava era o laço do agente — então **todo commit aprovado à mão passava sem
+virar memória**, que é o caminho de quem revisa o diff antes de commitar. A
+restauração de um backup também é registrada: sem isso a memória continuaria
+afirmando que um trabalho existe depois de ele ter sido desfeito.
 
 **Onde fica.** Em `chrome.storage.local`, na chave `repo:<owner/name>:memory` —
 mesmo namespacing do chat. Sobrevive a fechar o navegador; some quando você
@@ -443,6 +470,54 @@ exatamente o tipo de falha que precisa aparecer.
 - **CORS não é obstáculo**: páginas de extensão ignoram CORS para hosts em
   `host_permissions` — diferente de content scripts. Servidor que não libera nossa
   origem funciona do mesmo jeito.
+
+---
+
+## Imagens no chat
+
+Anexe pelo botão **Anexar** ou **cole uma captura de tela** direto no campo de
+texto. Até 4 imagens por mensagem, 5 MB cada, em PNG, JPEG, WebP ou GIF.
+
+**A imagem vale só no turno em que você anexa.** Nos turnos seguintes ela vira
+uma marca de texto (`[1 imagem(ns) enviada(s) neste turno: tela.png — não estão
+mais visíveis]`). O motivo é duplo: uma captura em base64 pesa centenas de KB, e
+reenviá-la a cada turno multiplicaria o custo em tokens e estouraria a cota de
+10 MB do `chrome.storage.local`. A marca existe para o modelo saber que houve
+uma imagem e poder pedir de novo, em vez de responder no chute.
+
+### O modelo enxerga?
+
+| Provedor | Como se sabe |
+|---|---|
+| Claude (Anthropic) | `yes` — a família inteira aceita imagem |
+| OpenRouter | o catálogo publica `input_modalities` por modelo |
+| Qualquer outro endpoint | `unknown` |
+
+Com `no` **confirmado**, o anexo é bloqueado e o botão de enviar explica por quê:
+a chamada falharia ou, pior, o modelo responderia ignorando a imagem em silêncio.
+Com `unknown` a extensão avisa mas deixa enviar — dizer "não" a um gateway
+próprio ou a um modelo recém-lançado que enxerga bem seria pior que o aviso.
+
+### Isolamento e imagens
+
+O canário de vazamento passou a serializar o payload **trocando o base64 por um
+marcador**. O alfabeto do base64 inclui `/`, então uma imagem grande pode conter
+por puro acaso algo com a forma `dono/projeto` e abortar o turno com um vazamento
+que nunca existiu. De quebra, evita varrer megabytes com regex a cada passo.
+
+---
+
+## Aparência
+
+A paleta segue o [Lovable](https://lovable.dev): laranja `#FE7B02`, azul
+`#4B73FF`, rosa `#EA8AAB`. Botões primários usam o gradiente laranja→rosa da
+logo, no lugar do verde anterior.
+
+O fundo é vidro: as superfícies são translúcidas e, atrás delas, um brilho
+radial nas cores da marca segue o cursor. A posição chega por variável CSS
+atualizada dentro de um `requestAnimationFrame` — guardá-la em estado do React
+re-renderizaria a árvore a cada pixel de movimento do mouse. O efeito respeita
+`prefers-reduced-motion`.
 
 ---
 

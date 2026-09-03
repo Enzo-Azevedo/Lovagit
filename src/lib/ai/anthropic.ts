@@ -34,6 +34,14 @@ export function createAnthropicProvider(
               content: result.content,
               is_error: result.isError ?? false,
             })),
+            ...(turn.images ?? []).map<Anthropic.ContentBlockParam>((image) => ({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: image.mediaType as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif',
+                data: image.dataBase64,
+              },
+            })),
             ...(turn.text ? [{ type: 'text' as const, text: turn.text }] : []),
           ];
           return { role: 'user', content };

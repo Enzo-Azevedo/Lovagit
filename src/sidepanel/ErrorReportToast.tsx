@@ -82,7 +82,7 @@ export function ErrorReportToast() {
           <span className="min-w-0 truncate text-ink-400">
             {lastSent.status === 'agrupado' ? 'Agrupado no issue' : 'Issue aberto'}{' '}
             <a
-              className="text-lime-accent hover:underline"
+              className="text-lov-orange hover:underline"
               href={lastSent.issueUrl}
               target="_blank"
               rel="noreferrer"

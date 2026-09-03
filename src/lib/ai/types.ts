@@ -1,4 +1,4 @@
-import type { ToolCall, ToolResult } from '../types';
+import type { ToolCall, ToolResult, TurnImage } from '../types';
 
 export interface ToolSchema {
   name: string;
@@ -19,6 +19,8 @@ export interface ProviderTurn {
   text?: string;
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
+  /** Imagens do turno do usuario. So no turno em que foram anexadas. */
+  images?: TurnImage[];
 }
 
 export interface CompletionRequest {

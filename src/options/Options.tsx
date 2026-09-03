@@ -8,6 +8,7 @@ import { providerOrigin } from '../lib/ai/registry';
 import { getRedirectUri, getStoredTokens, loginWithOAuth, logoutOAuth } from '../lib/ai/oauth';
 import { installErrorHandlers } from '../lib/telemetry/reporter';
 import type { ProviderConfig, Settings } from '../lib/types';
+import { useCursorGlow } from '../sidepanel/useCursorGlow';
 import { McpSection } from './McpSection';
 import { MemorySection } from './MemorySection';
 import { TelemetrySection } from './TelemetrySection';
@@ -34,6 +35,7 @@ const inputClass =
   'w-full rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs text-ink-200 outline-none placeholder:text-ink-600 focus:border-ink-600';
 
 export function Options() {
+  useCursorGlow();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pat, setPat] = useState('');
   const [patSaved, setPatSaved] = useState(false);
@@ -213,7 +215,7 @@ export function Options() {
         </p>
       )}
 
-      <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
+      <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
         <h2 className="text-sm text-ink-200">1. GitHub</h2>
         {patSaved ? (
           <div className="flex items-center justify-between rounded-md border border-ink-700 bg-ink-950 px-3 py-2">
@@ -239,7 +241,7 @@ export function Options() {
                 className={inputClass}
               />
               <button
-                className="rounded-md bg-lime-accent px-3 py-1.5 text-xs font-medium text-ink-950"
+                className="rounded-md bg-gradient-to-r from-lov-orange to-lov-pink px-3 py-1.5 text-xs font-medium text-lov-ink"
                 onClick={() => void saveToken()}
               >
                 Salvar
@@ -250,7 +252,7 @@ export function Options() {
         {patStatus && <p className="text-[11px] text-ink-400">{patStatus}</p>}
       </section>
 
-      <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
+      <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm text-ink-200">2. Inteligencia artificial</h2>
           <select
@@ -377,7 +379,7 @@ export function Options() {
                 </Field>
                 <div className="flex items-center gap-2">
                   <button
-                    className="rounded-md bg-lime-accent px-3 py-1.5 text-xs font-medium text-ink-950"
+                    className="rounded-md bg-gradient-to-r from-lov-orange to-lov-pink px-3 py-1.5 text-xs font-medium text-lov-ink"
                     onClick={() => void doOAuthLogin(provider)}
                   >
                     Fazer login
@@ -421,7 +423,7 @@ export function Options() {
                   </button>
                   {validations[provider.id] && (
                     <span
-                      className={`text-[11px] ${validations[provider.id].ok ? 'text-lime-accent' : 'text-red-300'}`}
+                      className={`text-[11px] ${validations[provider.id].ok ? 'text-lov-orange' : 'text-red-300'}`}
                     >
                       {validations[provider.id].message}
                     </span>
@@ -438,7 +440,7 @@ export function Options() {
                     }
                   />
                   <button
-                    className="rounded-md bg-lime-accent px-3 py-1.5 text-xs font-medium text-ink-950 disabled:opacity-40"
+                    className="rounded-md bg-gradient-to-r from-lov-orange to-lov-pink px-3 py-1.5 text-xs font-medium text-lov-ink disabled:opacity-40"
                     disabled={!(keyDrafts[provider.id] ?? '').trim()}
                     onClick={() => void saveProviderKey(provider, keyDrafts[provider.id] ?? '')}
                   >
@@ -451,7 +453,7 @@ export function Options() {
         ))}
       </section>
 
-      <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
+      <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
         <h2 className="text-sm text-ink-200">3. Politica de commit</h2>
         <label className="flex items-start gap-2 text-xs text-ink-200">
           <input
@@ -472,7 +474,7 @@ export function Options() {
         </label>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
+      <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
         <h2 className="text-sm text-ink-200">4. Falha passageira do provedor</h2>
         <label className="flex items-start gap-2 text-xs text-ink-200">
           <input

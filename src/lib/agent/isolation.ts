@@ -82,6 +82,21 @@ export function scopedHistory(scope: RepoScope, messages: ChatMessage[]): ChatMe
  * conectados dentro do payload que sairia para o modelo. Comparacao por nome
  * completo (`owner/name`) — dois repos do mesmo dono nao geram falso positivo.
  */
+/**
+ * Serializa o que vai ao modelo para o canario, trocando o base64 das imagens
+ * por um marcador.
+ *
+ * Duas razoes, e a primeira e' a que importa: base64 usa o alfabeto com `/`,
+ * entao uma imagem grande pode conter, por puro acaso, algo com a forma
+ * `dono/projeto` e abortar o turno com um vazamento que nao existe. A segunda e'
+ * custo — varrer megabytes de imagem com regex a cada passo do agente.
+ */
+export function leakCheckPayload(value: unknown): string {
+  return JSON.stringify(value, (chave, valor) =>
+    chave === 'dataBase64' ? `<imagem: ${String(valor).length} caracteres>` : valor,
+  );
+}
+
 export function assertNoForeignRepoLeak(
   scope: RepoScope,
   payload: string,

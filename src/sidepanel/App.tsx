@@ -5,6 +5,8 @@ import { installErrorHandlers } from '../lib/telemetry/reporter';
 import { ChatView } from './ChatView';
 import { ErrorReportToast } from './ErrorReportToast';
 import { RepoPicker } from './RepoPicker';
+import { UpdateBar } from './UpdateBar';
+import { useCursorGlow } from './useCursorGlow';
 import { useRepos } from './useRepos';
 import { Button, ErrorNote, Spinner } from './ui';
 
@@ -65,6 +67,8 @@ export function App() {
   const [storageBannerDismissed, setStorageBannerDismissed] = useState(false);
   const [unlimitedGranted, setUnlimitedGranted] = useState(true);
 
+  useCursorGlow();
+
   // Pega o que escapou de todo try/catch da aplicacao.
   useEffect(() => installErrorHandlers('sidepanel'), []);
 
@@ -111,7 +115,7 @@ export function App() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center gap-2 border-b border-ink-700 bg-ink-900 px-2 py-1.5">
+      <header className="glass flex items-center gap-2 border-b border-ink-700 bg-ink-900 px-2 py-1.5">
         <select
           value={activeRepoId ?? ''}
           onChange={(event) => setActiveRepoId(event.target.value || null)}
@@ -141,6 +145,8 @@ export function App() {
           ⚙
         </Button>
       </header>
+
+      <UpdateBar />
 
       {showStorageBanner && (
         <UnlimitedStorageBanner onDone={() => setStorageBannerDismissed(true)} />

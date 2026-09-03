@@ -51,6 +51,29 @@ export interface ToolResult {
   isError?: boolean;
 }
 
+/**
+ * Imagem anexada, do jeito que vai para o modelo: base64 cru mais o tipo.
+ *
+ * Vive apenas no turno em que foi anexada. Nada disso e' persistido — uma
+ * captura de tela vira centenas de KB em base64, e a cota do
+ * `chrome.storage.local` e' de 10 MB para tudo que a extensao guarda.
+ */
+export interface TurnImage {
+  mediaType: string;
+  /** Base64 SEM o prefixo `data:` — o Anthropic quer cru, o OpenAI quer URL. */
+  dataBase64: string;
+}
+
+/**
+ * O que sobra de um anexo no historico: o registro de que ele existiu. O
+ * conteudo em si e' descartado depois do turno.
+ */
+export interface AttachmentRef {
+  name: string;
+  mediaType: string;
+  bytes: number;
+}
+
 export interface ChatMessage {
   id: string;
   /** Sempre presente: o firewall de contexto rejeita mensagens de outro repo. */
@@ -65,6 +88,8 @@ export interface ChatMessage {
    * pensou no inicio do turno. Nunca e reenviado ao modelo.
    */
   reasoning?: string;
+  /** Imagens que acompanharam esta mensagem — so o registro, sem o conteudo. */
+  attachments?: AttachmentRef[];
   createdAt: number;
   /** Erro de execucao exibido na UI, nao enviado ao modelo. */
   error?: string;

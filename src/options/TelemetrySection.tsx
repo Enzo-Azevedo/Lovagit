@@ -13,7 +13,7 @@ const inputClass =
 
 const STATUS_STYLE: Record<LogEntry['status'], string> = {
   pendente: 'text-amber-300',
-  reportado: 'text-lime-accent',
+  reportado: 'text-lov-orange',
   agrupado: 'text-ink-400',
   cancelado: 'text-ink-400',
   suprimido: 'text-ink-400',
@@ -81,7 +81,7 @@ export function TelemetrySection() {
               placeholder="owner/nome"
             />
             <button
-              className="rounded-md bg-lime-accent px-3 py-1.5 text-xs font-medium text-ink-950 disabled:opacity-40"
+              className="rounded-md bg-gradient-to-r from-lov-orange to-lov-pink px-3 py-1.5 text-xs font-medium text-lov-ink disabled:opacity-40"
               disabled={!repoDraftValid || repoDraft.trim() === settings.targetRepoId}
               onClick={() => void update({ targetRepoId: repoDraft.trim() })}
             >
@@ -135,7 +135,7 @@ export function TelemetrySection() {
                 </span>
                 {entry.issueUrl && (
                   <a
-                    className="text-lime-accent hover:underline"
+                    className="text-lov-orange hover:underline"
                     href={entry.issueUrl}
                     target="_blank"
                     rel="noreferrer"
