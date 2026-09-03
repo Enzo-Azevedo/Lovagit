@@ -8,6 +8,7 @@ import {
   setToolEnabled,
   upsertMcpServer,
 } from '../lib/mcp/registry';
+import { originPatternFor, requestHostPermission } from '../lib/mcp/permissions';
 import type { McpServerConfig } from '../lib/mcp/types';
 import { getSettings } from '../lib/storage';
 import type { RepoId } from '../lib/types';
@@ -52,6 +53,29 @@ export function McpSection() {
     [reload],
   );
 
+  /**
+   * Pede a permissao de host e so entao conecta.
+   *
+   * A ordem nao e' estetica: `chrome.permissions.request` exige o gesto do
+   * usuario, e qualquer `await` antes dele encerra o gesto. Por isso este e' o
+   * primeiro await do clique, sempre.
+   */
+  const connectWithHostPermission = useCallback(
+    async (serverId: string, serverUrl: string) => {
+      const granted = await requestHostPermission(serverUrl);
+      if (!granted) {
+        setMessage(
+          `Sem permissao para acessar ${originPatternFor(serverUrl) ?? serverUrl}. ` +
+            'O navegador bloqueia a conexao com o servidor enquanto ela nao for concedida.',
+        );
+        await reload();
+        return;
+      }
+      await connect(serverId);
+    },
+    [connect, reload],
+  );
+
   const add = useCallback(async () => {
     let config: McpServerConfig;
     try {
@@ -64,6 +88,22 @@ export function McpSection() {
       setMessage('Use uma URL https — o navegador bloqueia http em extensao.');
       return;
     }
+    // Primeiro await do clique, pelo motivo explicado em
+    // `connectWithHostPermission`: depois de gravar o servidor o gesto ja
+    // morreu, e o pedido seria recusado pelo navegador.
+    const granted = await requestHostPermission(config.url);
+    if (!granted) {
+      setMessage(
+        `Sem permissao para acessar ${originPatternFor(config.url) ?? config.url}. ` +
+          'O servidor foi salvo; clique em "Reconectar" para conceder e tentar de novo.',
+      );
+      await upsertMcpServer(config);
+      setLabel('');
+      setUrl('');
+      await reload();
+      return;
+    }
+
     await upsertMcpServer(config);
     setLabel('');
     setUrl('');
@@ -79,6 +119,11 @@ export function McpSection() {
         chamado. Eles nao substituem o provedor de IA: o modelo continua vindo da chave configurada
         acima. A conexao usa o login do proprio provedor: descoberta de metadados, registro dinamico
         de cliente e consentimento na pagina dele, sem client_id digitado a mao.
+      </p>
+      <p className="text-[11px] text-ink-400">
+        Ao conectar, o navegador pede permissao de acesso ao dominio do servidor. Sem conceder, a
+        requisicao e' barrada antes de sair e o erro que aparece e' <code>Failed to fetch</code> —
+        que parece servidor fora do ar, mas e' permissao faltando.
       </p>
 
       <div className="grid grid-cols-[1fr_2fr_auto] gap-2">
@@ -134,7 +179,7 @@ export function McpSection() {
               <button
                 className={ghostButton}
                 disabled={busyId === server.id}
-                onClick={() => void connect(server.id)}
+                onClick={() => void connectWithHostPermission(server.id, server.url)}
               >
                 {busyId === server.id ? 'Conectando...' : 'Reconectar'}
               </button>

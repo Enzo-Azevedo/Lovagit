@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { McpServerConfig } from '../mcp/types';
 
 const store = new Map<string, unknown>();
+/** Ligado/desligado pelos testes: e' o que decide se o host esta liberado. */
+const hostLiberado = { valor: true };
+const fetchMock = vi.fn(async () => new Response('{}'));
+vi.stubGlobal('fetch', fetchMock);
 vi.stubGlobal('chrome', {
   storage: {
     local: {
@@ -12,9 +16,14 @@ vi.stubGlobal('chrome', {
       remove: async () => {},
     },
   },
+  permissions: {
+    contains: async () => hostLiberado.valor,
+    request: async () => hostLiberado.valor,
+  },
 });
 
 const {
+  connectMcpServer,
   getMcpServers,
   getServersForRepo,
   mcpToolSchemas,
@@ -103,5 +112,24 @@ describe('mcpToolSchemas', () => {
 
     const names = mcpToolSchemas(await getServersForRepo('acme/site')).map((tool) => tool.name);
     expect(names).toEqual(['mcp__a__query']);
+  });
+});
+
+describe('permissao de host antes de conectar', () => {
+  it('recusa sem sair para a rede, e diz que o problema e permissao', async () => {
+    // Este era o defeito: sem a permissao de host, o `fetch` saia como
+    // requisicao cross-origin comum, o navegador barrava por CORS e o que
+    // chegava ao usuario era "Failed to fetch" — que parece servidor fora do
+    // ar. Agora a verificacao vem antes, e o texto nomeia a causa real.
+    hostLiberado.valor = false;
+    fetchMock.mockClear();
+    await upsertMcpServer(server({ id: 'sem-permissao', url: 'https://mcp.supabase.com/mcp' }));
+
+    await expect(connectMcpServer('sem-permissao')).rejects.toThrow(/permissao/i);
+    expect(fetchMock, 'nao adianta tentar a rede sem permissao').not.toHaveBeenCalled();
+
+    const gravado = (await getMcpServers()).find((s) => s.id === 'sem-permissao');
+    expect(gravado?.lastError).toContain('https://mcp.supabase.com');
+    hostLiberado.valor = true;
   });
 });

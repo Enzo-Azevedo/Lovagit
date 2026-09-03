@@ -3,6 +3,7 @@ import { assertRepoId } from '../storage';
 import type { RepoId } from '../types';
 import { authorizeServer, forgetServerAuth } from './auth';
 import { McpClient } from './client';
+import { hasHostPermission } from './permissions';
 import { namespacedToolName } from './protocol';
 import { McpError, type McpCallResult, type McpServerConfig, type McpToolInfo } from './types';
 
@@ -144,6 +145,17 @@ export async function connectMcpServer(serverId: string): Promise<ConnectResult>
   const servers = await getMcpServers();
   const config = servers.find((server) => server.id === serverId);
   if (!config) throw new McpError('Servidor nao encontrado.', serverId, 'protocol');
+
+  // Antes de qualquer requisicao: sem a permissao de host, o navegador barra o
+  // `fetch` por CORS e o erro que chega e' de transporte — o usuario leria
+  // "servidor fora do ar" para um problema que e' de permissao, aqui dentro.
+  if (!(await hasHostPermission(config.url))) {
+    const message =
+      `A extensao ainda nao tem permissao para acessar ${new URL(config.url).origin}. ` +
+      'Clique em "Conectar" e aceite o pedido do navegador.';
+    await upsertMcpServer({ ...config, lastError: message });
+    throw new McpError(message, serverId, 'transport');
+  }
 
   const client = clientFor(config);
   let tools: McpToolInfo[];
