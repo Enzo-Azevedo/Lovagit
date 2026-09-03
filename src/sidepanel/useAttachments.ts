@@ -56,35 +56,42 @@ export function useAttachments() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
 
-  const addFiles = useCallback(async (files: File[]) => {
-    const recusas: string[] = [];
-    const aceitos: Attachment[] = [];
+  const addFiles = useCallback(
+    async (files: File[]) => {
+      const recusas: string[] = [];
+      const aceitos: Attachment[] = [];
 
-    for (const file of files) {
-      const motivo = rejectionReason(file);
-      if (motivo) {
-        recusas.push(motivo);
-        continue;
+      for (const file of files) {
+        const motivo = rejectionReason(file);
+        if (motivo) {
+          recusas.push(motivo);
+          continue;
+        }
+        contador += 1;
+        aceitos.push({
+          id: `anexo_${Date.now().toString(36)}_${contador}`,
+          name: file.name || `imagem-${contador}`,
+          mediaType: file.type,
+          bytes: file.size,
+          dataBase64: await readAsBase64(file),
+        });
       }
-      contador += 1;
-      aceitos.push({
-        id: `anexo_${Date.now().toString(36)}_${contador}`,
-        name: file.name || `imagem-${contador}`,
-        mediaType: file.type,
-        bytes: file.size,
-        dataBase64: await readAsBase64(file),
-      });
-    }
 
-    setAttachments((atuais) => {
-      const espaco = MAX_IMAGES_PER_MESSAGE - atuais.length;
+      // O teto e' conferido AQUI, e nao dentro do `setAttachments`: um efeito
+      // colateral dentro do atualizador roda duas vezes em StrictMode, e o
+      // `setAttachError` logo abaixo leria a lista de recusas antes de ela ser
+      // preenchida — o aviso de limite nunca apareceria.
+      const espaco = Math.max(0, MAX_IMAGES_PER_MESSAGE - attachments.length);
+      const entram = aceitos.slice(0, espaco);
       if (aceitos.length > espaco) {
         recusas.push(`Maximo de ${MAX_IMAGES_PER_MESSAGE} imagens por mensagem.`);
       }
-      return [...atuais, ...aceitos.slice(0, Math.max(0, espaco))];
-    });
-    setAttachError(recusas.length > 0 ? recusas.join(' ') : null);
-  }, []);
+
+      if (entram.length > 0) setAttachments((atuais) => [...atuais, ...entram]);
+      setAttachError(recusas.length > 0 ? recusas.join(' ') : null);
+    },
+    [attachments.length],
+  );
 
   const remove = useCallback((id: string) => {
     setAttachments((atuais) => atuais.filter((anexo) => anexo.id !== id));
@@ -96,21 +103,22 @@ export function useAttachments() {
     setAttachError(null);
   }, []);
 
-  /** Colar imagem do clipboard — o caminho natural para uma captura de tela. */
-  const addFromClipboard = useCallback(
-    async (items: DataTransferItemList | null): Promise<boolean> => {
-      const arquivos: File[] = [];
-      for (const item of Array.from(items ?? [])) {
-        if (item.kind !== 'file') continue;
-        const file = item.getAsFile();
-        if (file && SUPPORTED_IMAGE_TYPES.includes(file.type)) arquivos.push(file);
-      }
-      if (arquivos.length === 0) return false;
-      await addFiles(arquivos);
-      return true;
-    },
-    [addFiles],
-  );
+  return { attachments, attachError, addFiles, remove, clear };
+}
 
-  return { attachments, attachError, addFiles, addFromClipboard, remove, clear, setAttachError };
+/**
+ * Extrai as imagens do clipboard — SINCRONO, de proposito.
+ *
+ * `clipboardData` so e' valido enquanto o evento esta sendo despachado: ler os
+ * itens depois de um `await` devolve lista vazia. E `preventDefault` depois do
+ * evento nao previne nada, entao quem chama precisa decidir na hora.
+ */
+export function imageFilesFrom(items: DataTransferItemList | null): File[] {
+  const arquivos: File[] = [];
+  for (const item of Array.from(items ?? [])) {
+    if (item.kind !== 'file') continue;
+    const file = item.getAsFile();
+    if (file && SUPPORTED_IMAGE_TYPES.includes(file.type)) arquivos.push(file);
+  }
+  return arquivos;
 }

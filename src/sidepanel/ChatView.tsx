@@ -38,7 +38,7 @@ import { detectVisionSupport, describeVision, type VisionSupport } from '../lib/
 import { AssistantStep } from './AssistantStep';
 import { DiffView } from './DiffView';
 import { TOOL_LABEL } from './toolTrace';
-import { toPreviewUrl, toTurnImages, useAttachments } from './useAttachments';
+import { imageFilesFrom, toPreviewUrl, toTurnImages, useAttachments } from './useAttachments';
 import { Button, ErrorNote, RichText, Spinner } from './ui';
 
 interface ChatViewProps {
@@ -79,8 +79,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { attachments, attachError, addFiles, addFromClipboard, remove, clear } =
-    useAttachments();
+  const { attachments, attachError, addFiles, remove, clear } = useAttachments();
   /** O modelo ativo enxerga imagem? `unknown` = nao da para afirmar. */
   const [vision, setVision] = useState<VisionSupport>('unknown');
 
@@ -724,11 +723,13 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onPaste={(event) => {
-            // Colar uma captura de tela e' o caminho mais curto; se houve
-            // imagem no clipboard, ela vira anexo em vez de texto.
-            void addFromClipboard(event.clipboardData?.items ?? null).then((usou) => {
-              if (usou) event.preventDefault();
-            });
+            // Colar uma captura de tela e' o caminho mais curto. A leitura do
+            // clipboard e o `preventDefault` acontecem AGORA, sincronos: depois
+            // de um await a lista ja foi invalidada e o default ja aconteceu.
+            const arquivos = imageFilesFrom(event.clipboardData?.items ?? null);
+            if (arquivos.length === 0) return;
+            event.preventDefault();
+            void addFiles(arquivos);
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
