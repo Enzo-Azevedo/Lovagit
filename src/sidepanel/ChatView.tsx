@@ -6,6 +6,8 @@ import { applyChangesToMap } from '../lib/github/mapper';
 import { getServersForRepo } from '../lib/mcp/registry';
 import { captureError } from '../lib/telemetry/reporter';
 import { RETRY_DELAY_SECONDS, shouldAutoRetry } from '../lib/agent/retry';
+import { clearRepoMemory, forgetMemoryEntry, loadMemory, recordMemory } from '../lib/memory/store';
+import type { MemoryEntry } from '../lib/memory/types';
 import { applyChanges, defaultCommitMessage, restoreCheckpoint } from '../lib/github/writer';
 import {
   addCheckpoint,
@@ -29,6 +31,12 @@ interface ChatViewProps {
   onRemap: () => void;
 }
 
+const MEMORY_LABEL: Record<string, string> = {
+  request: 'pedido',
+  decision: 'decisao',
+  action: 'alteracao',
+};
+
 const TOOL_LABEL: Record<string, string> = {
   list_directory: 'listou',
   read_file: 'leu',
@@ -36,12 +44,15 @@ const TOOL_LABEL: Record<string, string> = {
   write_file: 'escreveu',
   delete_file: 'removeu',
   commit_changes: 'commitou',
+  remember: 'anotou',
 };
 
 export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatViewProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [pending, setPending] = useState<PendingFileChange[]>([]);
+  const [memory, setMemory] = useState<MemoryEntry[]>([]);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingMessage, setPendingMessage] = useState('');
   const [streaming, setStreaming] = useState('');
   /** Raciocinio do turno em andamento — some assim que a resposta chega. */
@@ -70,18 +81,22 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     setStreaming('');
     setReasoning('');
     setRetry(null);
+    setMemory([]);
+    setMemoryOpen(false);
     setError(null);
     void (async () => {
-      const [chat, cps, pendingSet] = await Promise.all([
+      const [chat, cps, pendingSet, mem] = await Promise.all([
         getChat(repo.id),
         getCheckpoints(repo.id),
         getPendingChanges(repo.id),
+        loadMemory(repo.id),
       ]);
       if (cancelled) return;
       setMessages(chat);
       setCheckpoints(cps);
       setPending(pendingSet?.changes ?? []);
       setPendingMessage(pendingSet?.message ?? '');
+      setMemory(mem);
     })();
     return () => {
       cancelled = true;
@@ -147,6 +162,9 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         history = await getChat(repo.id);
         // So os servidores MCP habilitados para ESTE repositorio.
         const mcpServers = await getServersForRepo(repo.id);
+      // Le a memoria ANTES do turno: o que for gravado agora vale do proximo em
+      // diante, para o modelo nunca ver o proprio registro no mesmo prompt.
+      const memoriaAtual = await loadMemory(repo.id);
 
         const onEvent = (event: AgentEvent) => {
           switch (event.type) {
@@ -185,6 +203,12 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
               });
               break;
             }
+            case 'memory':
+              // Grava e recarrega: o painel mostra o que a IA acabou de anotar.
+              void recordMemory(event.entry).then(async () => {
+                setMemory(await loadMemory(repo.id));
+              });
+              break;
             case 'committed':
               commitouNesteTurno = true;
               void persistCheckpoint(event.result.checkpoint, [...collectedChanges.values()]);
@@ -208,6 +232,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           autoApply: settings.autoApplyChanges,
           connectedRepoIds: settings.connectedRepoIds,
           mcpServers,
+          memory: memoriaAtual,
           signal: controller.signal,
           onEvent,
         });
@@ -454,6 +479,55 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
               voltar depois pelo historico abaixo.
             </p>
           </div>
+        )}
+
+        {memory.length > 0 && (
+          <details
+            className="rounded-lg border border-ink-700 bg-ink-900"
+            open={memoryOpen}
+            onToggle={(event) => setMemoryOpen(event.currentTarget.open)}
+          >
+            <summary className="cursor-pointer px-3 py-2 text-xs text-ink-400">
+              Memoria deste repositorio ({memory.length})
+            </summary>
+            <div className="space-y-2 border-t border-ink-700 p-2">
+              <p className="text-[10px] text-ink-400">
+                O que a IA leva para as proximas conversas. Se alguma linha estiver errada,
+                apague: memoria errada e repetida em todo prompt, e ai atrapalha mais do que
+                ajuda.
+              </p>
+              {[...memory].reverse().map((entry) => (
+                <div key={entry.id} className="rounded-md border border-ink-700 p-2">
+                  <p className="text-[11px] text-ink-200">{entry.summary}</p>
+                  <p className="font-mono text-[10px] text-ink-400">
+                    {MEMORY_LABEL[entry.kind]} ·{' '}
+                    {new Date(entry.createdAt).toLocaleDateString('pt-BR')}
+                    {entry.level > 0 && ' · comprimida'}
+                    {entry.refs?.commitSha ? ` · ${entry.refs.commitSha.slice(0, 7)}` : ''}
+                  </p>
+                  {entry.detail && entry.detail !== entry.summary && (
+                    <p className="mt-1 text-[10px] text-ink-400">{entry.detail}</p>
+                  )}
+                  <div className="mt-1">
+                    <Button
+                      variant="ghost"
+                      onClick={() =>
+                        void forgetMemoryEntry(repo.id, entry.id).then(setMemory)
+                      }
+                    >
+                      Esquecer
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button
+                variant="ghost"
+                onClick={() => void clearRepoMemory(repo.id).then(() => setMemory([]))}
+              >
+                Esquecer tudo deste repositorio
+              </Button>
+            </div>
+          </details>
         )}
 
         {checkpoints.length > 0 && (

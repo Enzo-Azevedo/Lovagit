@@ -59,6 +59,7 @@ async function run(provider: AIProvider) {
     autoApply: false,
     connectedRepoIds: ['acme/site'],
     mcpServers: [],
+      memory: [],
     onEvent: (event) => events.push(event),
   });
   return { events, messages };

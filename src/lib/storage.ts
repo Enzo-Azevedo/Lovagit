@@ -1,3 +1,4 @@
+import type { MemoryEntry } from './memory/types';
 import type {
   ChatMessage,
   Checkpoint,
@@ -40,6 +41,7 @@ const keys = {
   chat: (id: RepoId) => `repo:${assertRepoId(id)}:chat`,
   checkpoints: (id: RepoId) => `repo:${assertRepoId(id)}:checkpoints`,
   pending: (id: RepoId) => `repo:${assertRepoId(id)}:pending`,
+  memory: (id: RepoId) => `repo:${assertRepoId(id)}:memory`,
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -48,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
   connectedRepoIds: [],
   autoApplyChanges: true,
   autoRetryOnFailure: false,
+  memoryBudgetBytes: 1_073_741_824,
   githubUser: null,
 };
 
@@ -101,6 +104,29 @@ export async function saveChat(repoId: RepoId, messages: ChatMessage[]): Promise
   await chrome.storage.local.set({ [keys.chat(repoId)]: messages });
 }
 
+/**
+ * Memoria do repositorio. Mesmo molde do chat: a chave e' namespaced e o filtro
+ * por `repoId` e' redundante de proposito — se um dia uma entrada de outro
+ * repositorio aparecer aqui, ela morre na leitura em vez de virar prompt.
+ */
+/** Chave da memoria, para quem precisa medir sem carregar o conteudo. */
+export function memoryKey(repoId: RepoId): string {
+  return keys.memory(repoId);
+}
+
+export async function getMemoryEntries(repoId: RepoId): Promise<MemoryEntry[]> {
+  const entries = await readKey<MemoryEntry[]>(keys.memory(repoId), []);
+  return entries.filter((entry) => entry.repoId === repoId);
+}
+
+export async function saveMemoryEntries(repoId: RepoId, entries: MemoryEntry[]): Promise<void> {
+  const foreign = entries.find((entry) => entry.repoId !== repoId);
+  if (foreign) {
+    throw new Error(`Memoria de ${foreign.repoId} nao pode ser salva em ${repoId}`);
+  }
+  await chrome.storage.local.set({ [keys.memory(repoId)]: entries });
+}
+
 export async function getCheckpoints(repoId: RepoId): Promise<Checkpoint[]> {
   const list = await readKey<Checkpoint[]>(keys.checkpoints(repoId), []);
   return list.filter((c) => c.repoId === repoId);
@@ -152,6 +178,7 @@ export async function disconnectRepo(repoId: RepoId): Promise<Settings> {
     keys.chat(repoId),
     keys.checkpoints(repoId),
     keys.pending(repoId),
+    keys.memory(repoId),
   ]);
   const settings = await getSettings();
   return saveSettings({

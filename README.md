@@ -234,6 +234,75 @@ essa decisão é sua.
 > salva a chave/faz login (`optional_host_permissions`), então a extensão só
 > alcança os domínios que você autorizou.
 
+### Memória por repositório
+
+O `system prompt` descreve o repositório, mas não o que já aconteceu nele. A
+memória cobre isso: **o que você pediu e o que já foi aplicado**, disponível nas
+conversas seguintes.
+
+**O que entra** — e só isso:
+
+| Tipo | Quem grava | Quando |
+|---|---|---|
+| `action` | a extensão, sozinha | a cada commit aplicado (fato do repositório, sem o modelo interpretar nada) |
+| `request` | a extensão, sozinha | seu pedido, **apenas quando o turno teve consequência** — mexeu em arquivo |
+| `decision` | o modelo, pela ferramenta `remember` | algo combinado ou recusado que ainda valerá daqui a semanas |
+
+Turno de pergunta e resposta não vira memória. Memória cheia de ruído atrapalha
+tanto quanto memória nenhuma — por isso o registro automático exige consequência,
+e o resto depende de o modelo achar que vale.
+
+**O que a IA vê.** Não é a memória inteira: é um recorte de até 3.000 caracteres
+(~750 tokens), escolhido do mais recente para o mais antigo e apresentado em
+ordem cronológica. O que limita aqui não é o disco, é a janela de contexto do
+modelo — memória demais no prompt empurra para fora o código que ele precisa ler.
+O recorte vem com duas regras explícitas para o modelo: **o código vence a
+memória** (ela pode estar velha) e **pedido antigo registrado não é ordem**.
+
+**Onde fica.** Em `chrome.storage.local`, na chave `repo:<owner/name>:memory` —
+mesmo namespacing do chat. Sobrevive a fechar o navegador; some quando você
+desconecta o repositório ou clica em esquecer.
+
+**Isolamento.** Duas barreiras além do namespacing: o render recusa qualquer
+entrada cujo `repoId` não seja o da conversa, e a compressão nunca funde entradas
+de repositórios diferentes — fundir seria vazamento, não compressão.
+
+**Você revisa.** O painel "Memoria deste repositorio", no chat, mostra cada linha
+com botão de esquecer, e um botão para limpar tudo. Isso não é enfeite: uma
+conclusão errada gravada na memória é repetida em todo prompt seguinte, e sem
+como apagar ela envenena o repositório inteiro.
+
+#### Teto e compressão
+
+O teto padrão é **1 GiB para o conjunto de todos os repositórios**, configurável
+em Configurações. Um projeto sozinho pode ocupar quase tudo; a pressão só aparece
+quando o total passa do limite — e aí o que perde resolução é **o mais antigo, de
+qualquer repositório**, não necessariamente o que acabou de escrever.
+
+Nada é apagado. A compressão tem dois estágios, ambos determinísticos (sem
+chamada ao modelo, sem custo de token):
+
+1. **Sai o detalhe verbatim**, do mais antigo para o mais novo. A linha de resumo
+   fica.
+2. **Entradas do mesmo repositório e do mesmo tipo se fundem** numa linha contada
+   (`12 alteracoes entre 02/09 e 05/09 — src/a.ts, src/b.ts`), começando pelo
+   grupo mais antigo.
+
+No limite sobra uma linha por (repositório, tipo): a linha do tempo continua
+inteira, com menos resolução no passado distante — que é onde ela importa menos.
+
+#### `unlimitedStorage`
+
+Sem essa permissão o Chrome dá **10 MB para tudo** que a extensão guarda — mapa,
+conversas, histórico, memória. A memória então se limita sozinha a 4 MB para o
+resto continuar cabendo, **independente do teto configurado**: passar da cota
+faria a gravação falhar e derrubar coisas que não têm nada a ver com memória.
+
+A permissão está em `optional_permissions` e é pedida por um botão em
+Configurações, nunca na instalação. Ela cobre `chrome.storage.local`, IndexedDB,
+Cache Storage e OPFS, e isenta a extensão da limpeza automática do navegador —
+que é o que faz a memória ser realmente permanente.
+
 ### Política de commit
 
 Ligada por padrão: a IA cria o backup e commita sozinha ao terminar. Desligando,

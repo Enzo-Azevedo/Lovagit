@@ -4,6 +4,8 @@ import type { ChatMessage, PendingFileChange, RepoId, RepoMap, ToolCall } from '
 import { assertNoForeignRepoLeak, assertScopedMap, type RepoScope } from './isolation';
 import { buildSystemPrompt } from './prompt';
 import type { McpServerConfig } from '../mcp/types';
+import type { MemoryEntry } from '../memory/types';
+import type { NewMemoryEntry } from '../memory/store';
 import { buildToolSchemas, executeTool, type ToolRuntime } from './tools';
 
 /** Teto de idas e voltas com o modelo em um unico turno do usuario. */
@@ -22,6 +24,8 @@ export type AgentEvent =
   /** `commitMessage: null` = o modelo preparou arquivos sem propor mensagem. */
   | { type: 'awaiting-approval'; commitMessage: string | null; changes: PendingFileChange[] }
   | { type: 'committed'; result: ApplyResult }
+  /** Fato para a memoria do repositorio. Quem grava e' a camada de cima. */
+  | { type: 'memory'; entry: NewMemoryEntry }
   | { type: 'done' }
   | { type: 'error'; error: string };
 
@@ -37,6 +41,8 @@ export interface RunAgentOptions {
   connectedRepoIds: RepoId[];
   /** Servidores MCP habilitados para ESTE repositorio (ja filtrados). */
   mcpServers: McpServerConfig[];
+  /** Memoria ja gravada DESTE repositorio, para o system prompt. */
+  memory: MemoryEntry[];
   signal?: AbortSignal;
   onEvent: (event: AgentEvent) => void;
 }
@@ -79,7 +85,13 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
   const map = assertScopedMap(scope, options.map);
   const repoId = scope.repoId;
 
-  const system = buildSystemPrompt(scope, map, options.autoApply, options.mcpServers);
+  const system = buildSystemPrompt(
+    scope,
+    map,
+    options.autoApply,
+    options.mcpServers,
+    options.memory,
+  );
   const tools = buildToolSchemas(options.mcpServers);
   const produced: ChatMessage[] = [];
 
@@ -121,11 +133,26 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     onPendingChanged: () => onEvent({ type: 'pending-changed', changes: [...pending.values()] }),
     onCommitted: async (result) => {
       committed = result;
+      onEvent({
+        type: 'memory',
+        entry: {
+          repoId,
+          kind: 'action',
+          summary: result.checkpoint.message,
+          refs: {
+            commitSha: result.checkpoint.commitSha,
+            paths: result.checkpoint.files.map((arquivo) => arquivo.path),
+          },
+        },
+      });
       ref = result.checkpoint.commitSha;
       runtime.ref = ref;
       pending.clear();
       onEvent({ type: 'committed', result });
       onEvent({ type: 'pending-changed', changes: [] });
+    },
+    onRemember: (summary, detail) => {
+      onEvent({ type: 'memory', entry: { repoId, kind: 'decision', summary, detail } });
     },
     onAwaitingApproval: (message) => {
       awaitingApproval = message;
@@ -234,6 +261,17 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
   // string interna desta funcao.
   if (committed === null && awaitingApproval === null && pending.size > 0) {
     onEvent({ type: 'awaiting-approval', commitMessage: null, changes: [...pending.values()] });
+  }
+
+  // O pedido do usuario so vira memoria quando o turno teve consequencia. Turno
+  // de pergunta e resposta nao merece entrada: memoria cheia de ruido atrapalha
+  // tanto quanto memoria nenhuma. O que for digno de nota num turno assim, o
+  // modelo registra chamando `remember`.
+  if (committed !== null || pending.size > 0) {
+    onEvent({
+      type: 'memory',
+      entry: { repoId, kind: 'request', summary: options.userText, detail: options.userText },
+    });
   }
 
   onEvent({ type: 'done' });

@@ -1,4 +1,6 @@
 import { summarizeTree } from '../github/mapper';
+import { renderMemorySection } from '../memory/prompt';
+import type { MemoryEntry } from '../memory/types';
 import { namespacedToolName } from '../mcp/protocol';
 import type { McpServerConfig } from '../mcp/types';
 import type { RepoMap } from '../types';
@@ -23,7 +25,11 @@ export function buildSystemPrompt(
   map: RepoMap,
   autoApply: boolean,
   mcpServers: McpServerConfig[] = [],
+  memory: MemoryEntry[] = [],
 ): string {
+  // A memoria e' renderizada aqui dentro, a partir do mesmo escopo que o resto
+  // do prompt: nao ha caminho por onde a memoria de outro repositorio entre.
+  const memorySection = renderMemorySection(scope, memory);
   const writePolicy = autoApply
     ? [
         'Ao chamar `commit_changes`, a extensao executa nesta ordem, sem intervencao do usuario:',
@@ -96,6 +102,7 @@ ${writePolicy}
 - Se faltar informacao para decidir (nomenclatura, cenario, regra de negocio),
   pergunte antes de escrever codigo — errar a suposicao custa mais caro que perguntar.
 
+${memorySection}
 # Mapa do repositorio
 ${summarizeTree(map.entries)}
 

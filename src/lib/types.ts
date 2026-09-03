@@ -141,6 +141,11 @@ export interface Settings {
    * toda falha melhora na segunda tentativa.
    */
   autoRetryOnFailure: boolean;
+  /**
+   * Teto da memoria somando TODOS os repositorios. Um projeto sozinho pode
+   * ocupar quase tudo; a compressao so entra quando o conjunto passa daqui.
+   */
+  memoryBudgetBytes: number;
   githubUser?: { login: string; avatarUrl: string } | null;
 }
 
