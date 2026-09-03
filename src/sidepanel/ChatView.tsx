@@ -406,12 +406,6 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           return (
             <div key={message.id} className="space-y-1">
               {message.content && <RichText text={message.content} />}
-              {(message.toolCalls ?? []).map((call) => (
-                <div key={call.id} className="font-mono text-[10px] text-ink-400">
-                  → {TOOL_LABEL[call.name] ?? call.name}{' '}
-                  {String(call.input.path ?? call.input.query ?? '')}
-                </div>
-              ))}
             </div>
           );
         })}
@@ -433,51 +427,6 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
             <Button variant="ghost" onClick={() => setRetry(null)}>
               Cancelar
             </Button>
-          </div>
-        )}
-
-        {pending.length > 0 && (
-          <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-amber-300">
-                {pending.length} alteracao(oes) pendente(s)
-              </span>
-              {!running && (
-                <div className="flex gap-1">
-                  <Button variant="primary" disabled={applying} onClick={() => void approvePending()}>
-                    {applying ? 'Aplicando...' : `Commitar em ${repo.defaultBranch}`}
-                  </Button>
-                  <Button variant="ghost" disabled={applying} onClick={() => void discardPending()}>
-                    Descartar
-                  </Button>
-                </div>
-              )}
-            </div>
-            <label className="block">
-              <span className="mb-1 block text-[10px] text-ink-400">Mensagem do commit</span>
-              <textarea
-                value={pendingMessage}
-                rows={2}
-                disabled={running || applying}
-                onChange={(event) => setPendingMessage(event.target.value)}
-                onBlur={() =>
-                  void savePendingChanges({
-                    repoId: repo.id,
-                    changes: pending,
-                    message: pendingMessage,
-                    createdAt: Date.now(),
-                  })
-                }
-                className="w-full resize-none rounded-md border border-ink-700 bg-ink-950 p-1.5 font-mono text-[11px] text-ink-200 outline-none focus:border-ink-600 disabled:opacity-60"
-              />
-            </label>
-            {pending.map((change) => (
-              <DiffView key={change.path} change={change} />
-            ))}
-            <p className="text-[10px] text-ink-400">
-              Ao commitar, uma branch de backup da {repo.defaultBranch} e criada antes — da para
-              voltar depois pelo historico abaixo.
-            </p>
           </div>
         )}
 
@@ -568,6 +517,51 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
               ))}
             </div>
           </details>
+        )}
+
+        {pending.length > 0 && (
+          <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-amber-300">
+                {pending.length} alteracao(oes) pendente(s)
+              </span>
+              {!running && (
+                <div className="flex gap-1">
+                  <Button variant="primary" disabled={applying} onClick={() => void approvePending()}>
+                    {applying ? 'Aplicando...' : `Commitar em ${repo.defaultBranch}`}
+                  </Button>
+                  <Button variant="ghost" disabled={applying} onClick={() => void discardPending()}>
+                    Descartar
+                  </Button>
+                </div>
+              )}
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-[10px] text-ink-400">Mensagem do commit</span>
+              <textarea
+                value={pendingMessage}
+                rows={2}
+                disabled={running || applying}
+                onChange={(event) => setPendingMessage(event.target.value)}
+                onBlur={() =>
+                  void savePendingChanges({
+                    repoId: repo.id,
+                    changes: pending,
+                    message: pendingMessage,
+                    createdAt: Date.now(),
+                  })
+                }
+                className="w-full resize-none rounded-md border border-ink-700 bg-ink-950 p-1.5 font-mono text-[11px] text-ink-200 outline-none focus:border-ink-600 disabled:opacity-60"
+              />
+            </label>
+            {pending.map((change) => (
+              <DiffView key={change.path} change={change} />
+            ))}
+            <p className="text-[10px] text-ink-400">
+              Ao commitar, uma branch de backup da {repo.defaultBranch} e criada antes — da para
+              voltar depois pelo historico abaixo.
+            </p>
+          </div>
         )}
       </div>
 
