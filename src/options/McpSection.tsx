@@ -9,7 +9,7 @@ import {
   upsertMcpServer,
 } from '../lib/mcp/registry';
 import { originPatternFor, requestHostPermission } from '../lib/mcp/permissions';
-import type { McpServerConfig } from '../lib/mcp/types';
+import { McpError, type McpServerConfig } from '../lib/mcp/types';
 import { getSettings } from '../lib/storage';
 import type { RepoId } from '../lib/types';
 
@@ -26,6 +26,11 @@ export function McpSection() {
   const [url, setUrl] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  /** Origem que o login do servidor exige e que ainda nao foi liberada. O
+   *  pedido nao cabe no fluxo: ele precisa de um clique so dele. */
+  const [pendingOrigin, setPendingOrigin] = useState<{ serverId: string; origin: string } | null>(
+    null,
+  );
 
   const reload = useCallback(async () => {
     setServers(await getMcpServers());
@@ -40,11 +45,18 @@ export function McpSection() {
     async (serverId: string) => {
       setBusyId(serverId);
       setMessage(null);
+      setPendingOrigin(null);
       try {
         const { tools } = await connectMcpServer(serverId);
         setMessage(`Conectado — ${tools.length} ferramenta(s) descoberta(s).`);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : String(error));
+        // O login mora em outro dominio (o do Supabase sai de mcp.supabase.com
+        // para api.supabase.com). Pedir a permissao aqui nao adianta: o gesto do
+        // clique acabou faz varios awaits. Vira botao.
+        if (error instanceof McpError && error.kind === 'needs-permission' && error.origin) {
+          setPendingOrigin({ serverId, origin: error.origin });
+        }
       } finally {
         setBusyId(null);
         await reload();
@@ -75,6 +87,19 @@ export function McpSection() {
     },
     [connect, reload],
   );
+
+  /** Primeiro await do clique — de novo, pelo gesto. */
+  const grantPendingOrigin = useCallback(async () => {
+    if (!pendingOrigin) return;
+    const granted = await chrome.permissions.request({ origins: [`${pendingOrigin.origin}/*`] });
+    if (!granted) {
+      setMessage(`Sem permissao para ${pendingOrigin.origin} — o login nao tem como acontecer.`);
+      return;
+    }
+    const { serverId } = pendingOrigin;
+    setPendingOrigin(null);
+    await connect(serverId);
+  }, [connect, pendingOrigin]);
 
   const add = useCallback(async () => {
     let config: McpServerConfig;
@@ -148,6 +173,18 @@ export function McpSection() {
         <p className="rounded-md border border-ink-700 bg-ink-800 px-3 py-2 text-[11px] text-ink-200">
           {message}
         </p>
+      )}
+
+      {pendingOrigin && (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-lov-orange/30 bg-lov-orange/10 px-3 py-2 text-[11px] text-ink-200">
+          <span>
+            O login deste servidor acontece em <code>{pendingOrigin.origin}</code>, que ainda nao
+            foi liberado.
+          </span>
+          <button className={primaryButton} onClick={() => void grantPendingOrigin()}>
+            Liberar e conectar
+          </button>
+        </div>
       )}
 
       {servers.length === 0 && (

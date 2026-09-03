@@ -44,8 +44,25 @@ export class McpError extends Error {
   constructor(
     message: string,
     readonly serverId: string,
-    /** `unauthorized` dispara o fluxo OAuth; `session-expired` reconecta. */
-    readonly kind: 'unauthorized' | 'session-expired' | 'protocol' | 'transport' = 'protocol',
+    /**
+     * `unauthorized` dispara o fluxo OAuth; `session-expired` reconecta;
+     * `needs-permission` pede um clique para liberar a origem em `origin`.
+     */
+    readonly kind:
+      | 'unauthorized'
+      | 'session-expired'
+      | 'protocol'
+      | 'transport'
+      | 'needs-permission' = 'protocol',
+    /**
+     * Origem que falta liberar, quando `kind` e' `needs-permission`.
+     *
+     * Nao da para pedir essa permissao no meio do fluxo: o Chrome exige o gesto
+     * do usuario, e a essa altura ele ja acabou. Entao o erro sobe carregando a
+     * origem, e a interface transforma isso num botao — o proximo clique e' o
+     * gesto que faltava.
+     */
+    readonly origin?: string,
   ) {
     super(message);
     this.name = 'McpError';

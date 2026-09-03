@@ -4,7 +4,7 @@ import { ContextIsolationError } from '../agent/isolation';
 import { GitHubError } from '../github/client';
 import { ProviderError } from '../ai/types';
 
-const base = { enabled: true, alreadyRetried: false, committed: false };
+const base = { enabled: true, committed: false };
 
 /** O 504 de idle timeout do OpenRouter chega como erro em banda do stream. */
 const idleTimeout = new ProviderError(
@@ -48,8 +48,12 @@ describe('shouldAutoRetry', () => {
     expect(shouldAutoRetry({ ...base, error: abortado })).toBe(false);
   });
 
-  it('reenvia uma vez so — a falha do proprio reenvio nao agenda outro', () => {
-    expect(shouldAutoRetry({ ...base, alreadyRetried: true, error: idleTimeout })).toBe(false);
+  it('nao tem teto de tentativas: a falha do proprio reenvio agenda o proximo', () => {
+    // Provedor gratuito cai por minutos seguidos. Desistir na segunda tentativa
+    // devolvia o usuario para a tela parada que a opcao existe para evitar.
+    for (let tentativa = 1; tentativa <= 50; tentativa++) {
+      expect(shouldAutoRetry({ ...base, error: idleTimeout })).toBe(true);
+    }
   });
 
   it('nunca reenvia depois de um commit, para nao repetir trabalho ja gravado', () => {

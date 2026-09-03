@@ -66,11 +66,14 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   const [streaming, setStreaming] = useState('');
   /** Raciocinio do turno em andamento — some assim que a resposta chega. */
   const [reasoning, setReasoning] = useState('');
-  /** Reenvio automatico agendado: texto original e segundos restantes. */
+  /** Reenvio automatico agendado: texto original, segundos restantes e qual
+   *  tentativa vem a seguir. Nao ha teto — o numero aparece na tela justamente
+   *  para o usuario ver quanto ja insistiu e decidir se cancela. */
   const [retry, setRetry] = useState<{
     text: string;
     images: TurnImage[];
     secondsLeft: number;
+    attempt: number;
   } | null>(null);
   const [status, setStatus] = useState('');
   const [running, setRunning] = useState(false);
@@ -229,7 +232,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   );
 
   const runTurn = useCallback(
-    async (text: string, reenvioAutomatico = false, imagens: TurnImage[] = []) => {
+    async (text: string, tentativa = 0, imagens: TurnImage[] = []) => {
       if (!text || running) return;
       if (!activeProvider) {
         setError('Nenhuma IA conectada. Configure um provedor nas configuracoes.');
@@ -351,13 +354,17 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           shouldAutoRetry({
             enabled: settings.autoRetryOnFailure,
             error: caught,
-            alreadyRetried: reenvioAutomatico,
             committed: commitouNesteTurno,
           })
         ) {
           // O reenvio leva as MESMAS imagens: sem isso a segunda tentativa
-        // mandaria a pergunta sem a tela sobre a qual ela fala.
-        setRetry({ text, images: imagens, secondsLeft: RETRY_DELAY_SECONDS });
+          // mandaria a pergunta sem a tela sobre a qual ela fala.
+          setRetry({
+            text,
+            images: imagens,
+            secondsLeft: RETRY_DELAY_SECONDS,
+            attempt: tentativa + 1,
+          });
         }
       } finally {
         // Cancelar ou falhar no meio nao pode apagar o que ja foi dito no chat.
@@ -385,7 +392,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     if (!retry) return;
     if (retry.secondsLeft <= 0) {
       setRetry(null);
-      void runTurnRef.current(retry.text, true, retry.images);
+      void runTurnRef.current(retry.text, retry.attempt, retry.images);
       return;
     }
     const timer = setTimeout(() => {
@@ -406,7 +413,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     setInput('');
     const imagens = toTurnImages(attachments);
     clear();
-    void runTurn(text, false, imagens);
+    void runTurn(text, 0, imagens);
   }, [attachments, blockedByVision, clear, input, runTurn, running]);
 
   const approvePending = useCallback(async () => {
@@ -626,7 +633,9 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
 
         {retry && (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-ink-700 bg-ink-900 p-2 text-xs text-ink-300">
-            <span>Falha passageira. Reenviando em {retry.secondsLeft}s...</span>
+            <span>
+              Falha passageira. Reenviando em {retry.secondsLeft}s (tentativa {retry.attempt})...
+            </span>
             <Button variant="ghost" onClick={() => setRetry(null)}>
               Cancelar
             </Button>

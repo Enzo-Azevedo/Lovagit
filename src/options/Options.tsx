@@ -491,8 +491,10 @@ export function Options() {
               Vale so para falha passageira — queda de conexao, 429 e erro 5xx do provedor, como o
               "Upstream idle timeout exceeded" do OpenRouter. Chave invalida, modelo inexistente e
               erro da extensao nao sao reenviados, porque a segunda tentativa daria no mesmo. O
-              reenvio acontece uma vez por mensagem, da para cancelar durante a contagem, e nao
-              acontece se o turno ja tiver commitado alguma coisa.
+              reenvio insiste sem limite de tentativas, porque provedor gratuito costuma ficar
+              fora do ar por minutos seguidos. A contagem aparece no chat com o numero da tentativa
+              e um botao de cancelar, e mandar outra mensagem tambem interrompe. Nao acontece se o
+              turno ja tiver commitado alguma coisa.
             </span>
           </span>
         </label>
