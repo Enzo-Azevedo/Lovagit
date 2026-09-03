@@ -463,6 +463,58 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         </details>
       )}
 
+      {/* Memoria colada no topo, fora do scroll: e' um atalho de consulta, nao
+          um trecho da conversa. Dentro do scroll ela subia junto com as
+          mensagens e deixava de estar a um clique. */}
+      <details
+        className="shrink-0 border-b border-ink-700 bg-ink-900"
+        open={memoryOpen}
+        onToggle={(event) => setMemoryOpen(event.currentTarget.open)}
+      >
+        <summary className="cursor-pointer px-3 py-1.5 text-[11px] text-ink-400">
+          Memoria deste repositorio ({memory.length})
+        </summary>
+        <div className="max-h-64 space-y-2 overflow-y-auto border-t border-ink-700 p-2">
+          {memoryError && <ErrorNote>{memoryError}</ErrorNote>}
+          {memory.length === 0 ? (
+            <p className="text-[10px] text-ink-400">
+              Nada guardado ainda. A memoria enche quando um pedido seu vira alteracao
+              commitada, ou quando a IA anota uma decisao no meio do caminho.
+            </p>
+          ) : (
+            <>
+              <p className="text-[10px] text-ink-400">
+                O que a IA leva para as proximas conversas. Se alguma linha estiver errada,
+                apague: memoria errada e repetida em todo prompt, e ai atrapalha mais do que
+                ajuda.
+              </p>
+              {[...memory].reverse().map((entry) => (
+                <div key={entry.id} className="rounded-md border border-ink-700 p-2">
+                  <p className="text-[11px] text-ink-200">{entry.summary}</p>
+                  <p className="font-mono text-[10px] text-ink-400">
+                    {MEMORY_LABEL[entry.kind]} ·{' '}
+                    {new Date(entry.createdAt).toLocaleDateString('pt-BR')}
+                    {entry.level > 0 && ' · comprimida'}
+                    {entry.refs?.commitSha ? ` · ${entry.refs.commitSha.slice(0, 7)}` : ''}
+                  </p>
+                  {entry.detail && entry.detail !== entry.summary && (
+                    <p className="mt-1 text-[10px] text-ink-400">{entry.detail}</p>
+                  )}
+                  <div className="mt-1">
+                    <Button variant="ghost" onClick={() => void forgetEntry(entry.id)}>
+                      Esquecer
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button variant="ghost" onClick={() => void forgetAll()}>
+                Esquecer tudo deste repositorio
+              </Button>
+            </>
+          )}
+        </div>
+      </details>
+
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3">
         {messages.length === 0 && (
           <div className="rounded-lg border border-dashed border-ink-700 p-4 text-xs text-ink-400">
@@ -513,55 +565,6 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
             </Button>
           </div>
         )}
-
-        <details
-          className="rounded-lg border border-ink-700 bg-ink-900"
-          open={memoryOpen}
-          onToggle={(event) => setMemoryOpen(event.currentTarget.open)}
-        >
-          <summary className="cursor-pointer px-3 py-2 text-xs text-ink-400">
-            Memoria deste repositorio ({memory.length})
-          </summary>
-          <div className="space-y-2 border-t border-ink-700 p-2">
-            {memoryError && <ErrorNote>{memoryError}</ErrorNote>}
-            {memory.length === 0 ? (
-              <p className="text-[10px] text-ink-400">
-                Nada guardado ainda. A memoria enche quando um pedido seu vira alteracao
-                commitada, ou quando a IA anota uma decisao no meio do caminho.
-              </p>
-            ) : (
-              <>
-                <p className="text-[10px] text-ink-400">
-                  O que a IA leva para as proximas conversas. Se alguma linha estiver errada,
-                  apague: memoria errada e repetida em todo prompt, e ai atrapalha mais do que
-                  ajuda.
-                </p>
-                {[...memory].reverse().map((entry) => (
-                  <div key={entry.id} className="rounded-md border border-ink-700 p-2">
-                    <p className="text-[11px] text-ink-200">{entry.summary}</p>
-                    <p className="font-mono text-[10px] text-ink-400">
-                      {MEMORY_LABEL[entry.kind]} ·{' '}
-                      {new Date(entry.createdAt).toLocaleDateString('pt-BR')}
-                      {entry.level > 0 && ' · comprimida'}
-                      {entry.refs?.commitSha ? ` · ${entry.refs.commitSha.slice(0, 7)}` : ''}
-                    </p>
-                    {entry.detail && entry.detail !== entry.summary && (
-                      <p className="mt-1 text-[10px] text-ink-400">{entry.detail}</p>
-                    )}
-                    <div className="mt-1">
-                      <Button variant="ghost" onClick={() => void forgetEntry(entry.id)}>
-                        Esquecer
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                <Button variant="ghost" onClick={() => void forgetAll()}>
-                  Esquecer tudo deste repositorio
-                </Button>
-              </>
-            )}
-          </div>
-        </details>
 
         {pending.length > 0 && (
           <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">

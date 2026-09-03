@@ -283,7 +283,8 @@ desconecta o repositório ou clica em esquecer.
 entrada cujo `repoId` não seja o da conversa, e a compressão nunca funde entradas
 de repositórios diferentes — fundir seria vazamento, não compressão.
 
-**Você revisa.** O painel "Memoria deste repositorio", no chat, mostra cada linha
+**Você revisa.** O painel "Memoria deste repositorio" fica fixo no topo do chat,
+fora da área que rola — sempre a um clique. Ele mostra cada linha
 com botão de esquecer, e um botão para limpar tudo. Isso não é enfeite: uma
 conclusão errada gravada na memória é repetida em todo prompt seguinte, e sem
 como apagar ela envenena o repositório inteiro.
