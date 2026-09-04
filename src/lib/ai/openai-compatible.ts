@@ -246,7 +246,30 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
     label: options.label,
     model: options.model,
     async complete(request: CompletionRequest): Promise<CompletionResponse> {
-      const token = await options.getAuthToken();
+      // Credencial em branco NAO pode virar requisicao. `Bearer ` com token
+      // vazio nao e' o mesmo que header ausente: o OpenRouter responde 401
+      // "Missing Authentication header" — uma frase que manda o usuario procurar
+      // um header que a extensao mandou. O erro tem que ser dito aqui, onde da
+      // para dizer o que fazer.
+      //
+      // O `trim` importa: um `!token` nu deixa passar chave so de espacos, que
+      // e' truthy e chega ao provedor exatamente como chave vazia.
+      const token = (await options.getAuthToken())?.trim() ?? '';
+      if (!token) {
+        throw new ProviderError(
+          `${options.label}: a chave de API esta vazia. Salve a chave em Configuracoes > ` +
+            'Inteligencia artificial e clique em "Testar chave salva".',
+          'auth',
+        );
+      }
+      if (!options.model.trim()) {
+        throw new ProviderError(
+          `${options.label}: nenhum modelo informado. Cole o identificador do modelo ` +
+            '(ex.: vendor/modelo) em Configuracoes > Inteligencia artificial.',
+          'unavailable',
+        );
+      }
+
       const endpoint = normalizeBaseUrl(options.baseUrl);
 
       const enviar = async (pedirRaciocinio: boolean): Promise<Response> => {
@@ -312,8 +335,14 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
       }
 
       if (!response.ok || !response.body) {
+        // O 401 do provedor costuma vir com texto proprio que nao diz o que
+        // fazer; a dica encurta o caminho entre ler o erro e resolver.
+        const dica =
+          response.status === 401
+            ? ' — a chave foi recusada. Confira em Configuracoes > Inteligencia artificial.'
+            : '';
         throw new ProviderError(
-          `${options.label} respondeu ${response.status}: ${detail.slice(0, 300) || response.statusText}`,
+          `${options.label} respondeu ${response.status}: ${detail.slice(0, 300) || response.statusText}${dica}`,
           providerKindForStatus(response.status),
         );
       }

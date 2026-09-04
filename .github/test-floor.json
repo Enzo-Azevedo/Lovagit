@@ -5,6 +5,6 @@
     "reducao vira uma decisao explicita, revisavel no diff, em vez de passar",
     "despercebida. Apagar teste e a forma mais silenciosa de deixar o CI verde."
   ],
-  "minTests": 298,
-  "minTestFiles": 31
+  "minTests": 303,
+  "minTestFiles": 32
 }

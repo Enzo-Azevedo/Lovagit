@@ -5,17 +5,28 @@ import { createOpenAICompatibleProvider } from './openai-compatible';
 import { getValidAccessToken } from './oauth';
 import { ProviderError, type AIProvider } from './types';
 
+/**
+ * Le a chave do cofre, tratando "so espacos" como ausente.
+ *
+ * Sem o `trim`, uma chave de espacos passava pela verificacao (string truthy) e
+ * saia como `Bearer   ` — que o provedor recusa com um 401 falando de header
+ * ausente, mandando o usuario procurar o problema no lugar errado.
+ */
+async function lerChave(config: ProviderConfig): Promise<string> {
+  const apiKey = (await getSecret(SecretNames.providerApiKey(config.id)))?.trim();
+  if (!apiKey) throw new ProviderError(`Configure a chave de API de ${config.label}.`, 'auth');
+  return apiKey;
+}
+
 /** Instancia o provedor ativo. As credenciais saem do cofre so aqui. */
 export async function createProvider(config: ProviderConfig): Promise<AIProvider> {
   switch (config.kind) {
     case 'anthropic': {
-      const apiKey = await getSecret(SecretNames.providerApiKey(config.id));
-      if (!apiKey) throw new ProviderError(`Configure a chave de API de ${config.label}.`, 'auth');
+      const apiKey = await lerChave(config);
       return createAnthropicProvider(config, apiKey);
     }
     case 'openai-compatible': {
-      const apiKey = await getSecret(SecretNames.providerApiKey(config.id));
-      if (!apiKey) throw new ProviderError(`Configure a chave de API de ${config.label}.`, 'auth');
+      const apiKey = await lerChave(config);
       return createOpenAICompatibleProvider({
         id: config.id,
         label: config.label,
