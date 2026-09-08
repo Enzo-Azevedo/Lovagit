@@ -85,8 +85,17 @@ jobs:
           retention-days: 90
 
       # Release rolante: a tag `latest` sempre aponta para o ultimo build da
-      # main, com URL de download estavel. Recriar e mais simples (e mais
-      # confiavel) do que tentar mover a tag de uma release existente.
+      # main, com URL de download estavel.
+      #
+      # A tag e' MOVIDA, nunca apagada e recriada. Apagar e recriar parecia mais
+      # simples, ate o build 26 falhar com HTTP 500 no `create` depois de o
+      # `delete` ja ter passado: a remocao da ref no GitHub e' assincrona, e
+      # criar a release na mesma tag logo em seguida disputa com ela.
+      #
+      # O estrago nao era so o check vermelho. Entre apagar e criar existe uma
+      # janela sem release nenhuma, e quando o `create` falha essa janela nao
+      # fecha: toda extensao instalada passa a receber 404 ao procurar versao
+      # nova. Movendo a tag, o pior caso vira "a release continua a anterior".
       - name: Atualizar a release `latest`
         env:
           GH_TOKEN: ${{ github.token }}
@@ -99,12 +108,31 @@ jobs:
           Instalacao: baixe o zip, extraia, e em chrome://extensions ative o Modo do
           desenvolvedor e use \"Carregar sem compactacao\" apontando para a pasta extraida."
 
-          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest out/lovagit-latest.zip \
-            --title "Build da main (${{ steps.package.outputs.short_sha }})" \
-            --notes "$NOTES" \
-            --prerelease \
-            --target "$GITHUB_SHA"
+          TITULO="Build da main (${{ steps.package.outputs.short_sha }})"
+
+          # Tres tentativas: 500 da API do GitHub acontece, e aqui ele custaria
+          # o build inteiro por algo que costuma passar na segunda.
+          tentar() {
+            for espera in 0 5 15; do
+              [ "$espera" -gt 0 ] && sleep "$espera"
+              "$@" && return 0
+              echo "Falhou: $* — nova tentativa"
+            done
+            return 1
+          }
+
+          git tag -f latest "$GITHUB_SHA"
+          tentar git push -f origin refs/tags/latest
+
+          if gh release view latest >/dev/null 2>&1; then
+            tentar gh release edit latest --title "$TITULO" --notes "$NOTES" --prerelease
+            tentar gh release upload latest out/lovagit-latest.zip --clobber
+          else
+            tentar gh release create latest out/lovagit-latest.zip \
+              --title "$TITULO" \
+              --notes "$NOTES" \
+              --prerelease
+          fi
 
       # Release versionada: sai uma vez por versao, quando o package.json muda.
       # Sem isso, uma tag `v0.3.0` seria recriada a cada push e o historico de
