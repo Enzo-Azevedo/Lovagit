@@ -1,3 +1,4 @@
+import { isNetworkFailure } from '../net';
 import type { ToolCall } from '../types';
 import {
   ProviderError,
@@ -358,6 +359,10 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
       let buffer = '';
       let interrupted = false;
+      // Quanto tempo o stream durou antes de cair. Cair sempre perto do mesmo
+      // numero e' a assinatura de um tempo limite — e tempo limite tem dono, ao
+      // contrario de queda de rede, que e' aleatoria por natureza.
+      const comecou = Date.now();
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -384,18 +389,32 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
           }
         }
       } catch (error) {
-        // O Chrome rejeita a leitura com `TypeError: network error` quando a
-        // conexao cai no meio do stream — algo que acontece de verdade com
-        // agregadores em geracoes longas.
         if (request.signal?.aborted) throw error;
+
+        // Nem toda falha aqui e' queda de conexao, e dizer que e' esconderia
+        // justamente o caso que mais importa: um defeito NOSSO no laco de
+        // leitura chegaria ao usuario disfarcado de problema de rede, sem virar
+        // issue e sem ninguem nunca descobrir. Erro que nao passa no
+        // reconhecimento de falha de rede sobe cru, para ser classificado como
+        // defeito da extensao e abrir issue.
+        if (!isNetworkFailure(error)) throw error;
 
         // Um tool call pela metade NUNCA pode ser aproveitado: o JSON truncado
         // viraria, por exemplo, um write_file com o arquivo cortado. Sem texto
         // util ou com tool call em andamento, a queda e erro mesmo.
         if (acc.text === '' || acc.toolCalls.size > 0) {
+          // Dizer O QUE se perdeu, e nao so quantos caracteres chegaram: com
+          // ferramenta em andamento o turno inteiro se perde, e saber disso e'
+          // o que explica por que reenviar e' seguro.
+          const perdido =
+            acc.toolCalls.size > 0
+              ? `enquanto o modelo montava uma chamada de ferramenta (${acc.text.length} caractere(s) de texto ja recebidos). ` +
+                'A chamada incompleta foi descartada de proposito: um JSON cortado viraria uma acao errada'
+              : 'antes de qualquer texto chegar';
+          const segundos = Math.round((Date.now() - comecou) / 1000);
           throw new ProviderError(
-            `A conexao com ${options.label} caiu durante a resposta ` +
-              `(${acc.text.length} caractere(s) recebidos). Tente enviar de novo.`,
+            `A conexao com ${options.label} caiu ${perdido}, apos ${segundos}s de stream. ` +
+              'Tente enviar de novo.',
             'network',
             error,
           );

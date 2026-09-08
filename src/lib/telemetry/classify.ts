@@ -2,6 +2,7 @@ import { ContextIsolationError } from '../agent/isolation';
 import { GitHubError } from '../github/client';
 import { McpError } from '../mcp/types';
 import { ProviderError } from '../ai/types';
+import { isNetworkFailure } from '../net';
 import type { ErrorCategory, ErrorOrigin } from './types';
 
 export interface Classification {
@@ -17,21 +18,6 @@ function isAbort(error: unknown): boolean {
   return (
     error instanceof DOMException &&
     (error.name === 'AbortError' || error.name === 'TimeoutError')
-  );
-}
-
-/**
- * `fetch` e a leitura de um stream rejeitam com TypeError quando a rede cai ou
- * a origem nao foi permitida. As mensagens variam por navegador e por momento
- * da falha — o Chrome usa "Failed to fetch" na requisicao e "network error"
- * quando o stream e interrompido no meio.
- */
-function isNetworkFailure(error: unknown): boolean {
-  return (
-    error instanceof TypeError &&
-    /failed to fetch|network\s*error|load failed|network request failed|connection closed/i.test(
-      error.message,
-    )
   );
 }
 

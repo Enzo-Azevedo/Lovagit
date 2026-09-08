@@ -44,7 +44,7 @@ describe('falha de rede no streaming', () => {
 
     expect(erro).toBeInstanceOf(ProviderError);
     expect((erro as ProviderError).kind).toBe('network');
-    expect((erro as ProviderError).message).toContain('caiu durante a resposta');
+    expect((erro as ProviderError).message).toContain('caiu antes de qualquer texto chegar');
   });
 
   it('vira ProviderError de rede quando a requisicao nem sai', async () => {
@@ -218,5 +218,77 @@ describe('providerKindForStatus', () => {
     expect(kindForStreamErrorCode(404)).toBe('unavailable');
     expect(kindForStreamErrorCode('404')).toBe('unavailable');
     expect(kindForStreamErrorCode(undefined)).toBe('http');
+  });
+});
+
+describe('o que a extensao pode e nao pode afirmar sobre a queda', () => {
+  /** Monta as linhas SSE sem duelo de escapes: o objeto vira JSON aqui. */
+  function sse(...chunks: unknown[]): string {
+    return chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('');
+  }
+
+  /**
+   * Stream que entrega `texto` e so entao rejeita a leitura com `falha`.
+   *
+   * O erro sai num `pull` seguinte, e nao no mesmo: enfileirar e errar de uma
+   * vez faz o dado enfileirado ser descartado junto, e o teste passaria a medir
+   * um stream que nunca entregou nada.
+   */
+  function streamQueQuebra(texto: string, falha: unknown) {
+    return providerWith((async () => {
+      let etapa = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          if (etapa === 0) {
+            etapa += 1;
+            controller.enqueue(new TextEncoder().encode(texto));
+            return;
+          }
+          controller.error(falha);
+        },
+      });
+      return new Response(body, { status: 200 });
+    }) as unknown as typeof fetch);
+  }
+
+  it('erro que nao e de rede sobe cru, em vez de virar "a conexao caiu"', async () => {
+    // E' o caso que mais importa: um defeito NOSSO no laco de leitura chegaria
+    // ao usuario disfarcado de problema de rede — sem virar issue, e sem
+    // ninguem descobrir nunca que a causa estava aqui dentro.
+    const bug = new RangeError('defeito interno no laco de leitura');
+    const provider = streamQueQuebra(sse({ choices: [{ delta: { content: 'oi' } }] }), bug);
+
+    const erro = await provider.complete(pedido).catch((e: unknown) => e);
+
+    expect(erro).toBe(bug);
+    expect(erro).not.toBeInstanceOf(ProviderError);
+  });
+
+  it('queda com ferramenta em andamento diz o que se perdeu, nao so o tamanho', async () => {
+    // Contar caracteres nao explica nada. O que explica e' que havia uma
+    // chamada de ferramenta pela metade — e que ela foi descartada de
+    // proposito, porque um JSON cortado viraria uma acao errada.
+    const pelaMetade = sse(
+      { choices: [{ delta: { content: 'vou ler o arquivo' } }] },
+      {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                { index: 0, id: 'c1', function: { name: 'read_file', arguments: '{"path":"src/' } },
+              ],
+            },
+          },
+        ],
+      },
+    );
+    const provider = streamQueQuebra(pelaMetade, new TypeError('network error'));
+
+    const erro = (await provider.complete(pedido).catch((e: unknown) => e)) as ProviderError;
+
+    expect(erro).toBeInstanceOf(ProviderError);
+    expect(erro.kind).toBe('network');
+    expect(erro.message).toContain('chamada de ferramenta');
+    expect(erro.message).toMatch(/apos \d+s de stream/);
   });
 });
