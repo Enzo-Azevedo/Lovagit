@@ -4,6 +4,7 @@ import type { RepoId } from '../types';
 import { authorizeServer, forgetServerAuth } from './auth';
 import { McpClient } from './client';
 import { hasHostPermission } from './permissions';
+import { platformTokenForMcpUrl } from '../platforms/store';
 import { clearServerToken, getServerToken, setServerToken } from './token';
 import { namespacedToolName } from './protocol';
 import { McpError, type McpCallResult, type McpServerConfig, type McpToolInfo } from './types';
@@ -188,7 +189,9 @@ export async function connectMcpServer(serverId: string): Promise<ConnectResult>
       // Com token colado a mao, 401 significa que ELE foi recusado. Abrir a
       // janela do OAuth aqui trocaria a credencial que o usuario escolheu por
       // outra, sem avisar, e escondendo qual das duas o servidor rejeitou.
-      if (await getServerToken(serverId)) {
+      const informado =
+        (await getServerToken(serverId)) ?? (await platformTokenForMcpUrl(config.url));
+      if (informado) {
         const message =
           'O servidor recusou o token informado. Confira se ele e valido e se tem os ' +
           'acessos necessarios.';

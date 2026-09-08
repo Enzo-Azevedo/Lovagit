@@ -20,6 +20,8 @@ export const SecretNames = {
   mcpOAuth: (serverId: string) => `mcp:${serverId}:oauth`,
   /** Token de acesso colado pelo usuario (ex.: `sbp_...` do Supabase). */
   mcpToken: (serverId: string) => `mcp:${serverId}:token`,
+  /** Token pessoal de uma plataforma conhecida (Supabase, por ora). */
+  platformToken: (platformId: string) => `platform:${platformId}:token`,
 } as const;
 
 function openDb(): Promise<IDBDatabase> {

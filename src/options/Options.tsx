@@ -10,7 +10,7 @@ import { installErrorHandlers } from '../lib/telemetry/reporter';
 import type { ProviderConfig, Settings } from '../lib/types';
 import { useCursorGlow } from '../sidepanel/useCursorGlow';
 import { BackupSection } from './BackupSection';
-import { McpSection } from './McpSection';
+import { ConnectionsSection } from './ConnectionsSection';
 import { MemorySection } from './MemorySection';
 import { TelemetrySection } from './TelemetrySection';
 
@@ -540,7 +540,7 @@ export function Options() {
 
       <MemorySection />
 
-      <McpSection />
+      <ConnectionsSection />
 
       <TelemetrySection />
 

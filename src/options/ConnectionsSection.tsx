@@ -11,6 +11,7 @@ import {
 } from '../lib/mcp/registry';
 import { originPatternFor, requestHostPermission } from '../lib/mcp/permissions';
 import { getServerToken } from '../lib/mcp/token';
+import { PlatformsBlock } from './PlatformsBlock';
 import { McpError, type McpServerConfig } from '../lib/mcp/types';
 import { getSettings } from '../lib/storage';
 import type { RepoId } from '../lib/types';
@@ -21,7 +22,7 @@ const primaryButton =
   'rounded-md bg-gradient-to-r from-lov-orange to-lov-pink px-3 py-1.5 text-xs font-medium text-lov-ink disabled:opacity-40';
 const ghostButton = 'rounded-md border border-ink-700 px-3 py-1.5 text-xs text-ink-200';
 
-export function McpSection() {
+export function ConnectionsSection() {
   const [servers, setServers] = useState<McpServerConfig[]>([]);
   const [repoIds, setRepoIds] = useState<RepoId[]>([]);
   const [label, setLabel] = useState('');
@@ -162,7 +163,16 @@ export function McpSection() {
 
   return (
     <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
-      <h2 className="text-sm text-ink-200">6. Servidores MCP (ferramentas extras)</h2>
+      <h2 className="text-sm text-ink-200">6. Conexoes</h2>
+      <p className="text-[11px] text-ink-400">
+        Credenciais e ferramentas que o agente pode usar alem do GitHub. Sao de dois tipos:
+        plataformas conhecidas, onde basta o token pessoal, e servidores MCP, que sao qualquer
+        endereco que fale o protocolo.
+      </p>
+
+      <PlatformsBlock onMessage={setMessage} />
+
+      <h3 className="pt-2 text-xs text-ink-200">Servidores MCP (ferramentas extras)</h3>
       <p className="text-[11px] text-ink-400">
         Servidores MCP dao ferramentas ao agente — consultar um banco, ler um projeto, abrir um
         chamado. Eles nao substituem o provedor de IA: o modelo continua vindo da chave configurada
@@ -286,8 +296,9 @@ export function McpSection() {
             </div>
             <p className="mt-1 text-[10px] text-ink-400">
               Para servidor que nao faz login por OAuth, ou quando voce prefere um token proprio —
-              no Supabase e' o <em>personal access token</em> (<code>sbp_...</code>). Havendo token,
-              ele e' usado no lugar do OAuth. Fica no cofre cifrado, nunca na configuracao em claro.
+              use quando o servico nao faz login por OAuth, ou quando voce prefere um token
+              proprio. Havendo token, ele e' usado no lugar do OAuth. Plataforma ja cadastrada
+              acima dispensa isto: o token dela vale para o servidor MCP do mesmo servico.
             </p>
           </div>
 
