@@ -9,6 +9,7 @@ import { getRedirectUri, getStoredTokens, loginWithOAuth, logoutOAuth } from '..
 import { installErrorHandlers } from '../lib/telemetry/reporter';
 import type { ProviderConfig, Settings } from '../lib/types';
 import { useCursorGlow } from '../sidepanel/useCursorGlow';
+import { BackupSection } from './BackupSection';
 import { McpSection } from './McpSection';
 import { MemorySection } from './MemorySection';
 import { TelemetrySection } from './TelemetrySection';
@@ -205,6 +206,10 @@ export function Options() {
 
   if (!settings) return <div className="p-6 text-xs text-ink-400">Carregando...</div>;
 
+  /** Nada configurado ainda: provavelmente uma instalacao recem-feita. */
+  const instalacaoVazia =
+    !patSaved && settings.providers.length === 0 && settings.connectedRepoIds.length === 0;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
       <header>
@@ -219,6 +224,20 @@ export function Options() {
         <p className="rounded-md border border-ink-700 bg-ink-800 px-3 py-2 text-xs text-ink-200">
           {message}
         </p>
+      )}
+
+      {/* Instalacao vazia: o momento certo de lembrar do backup e' agora, antes
+          de a pessoa recomecar a configuracao inteira na mao. Some sozinho
+          assim que houver qualquer coisa configurada. */}
+      {instalacaoVazia && (
+        <a
+          href="#backup"
+          className="block rounded-lg border border-lov-orange/30 bg-lov-orange/10 px-3 py-2 text-xs text-ink-200 hover:border-lov-orange/60"
+        >
+          <strong>Instalacao nova.</strong> Se voce guardou um backup de outra instalacao, importe
+          antes de configurar do zero — ele traz repositorios, provedores, conversas e memoria.
+          <span className="ml-1 text-lov-orange">Ir para o backup →</span>
+        </a>
       )}
 
       <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
@@ -524,6 +543,8 @@ export function Options() {
       <McpSection />
 
       <TelemetrySection />
+
+      <BackupSection />
     </div>
   );
 }

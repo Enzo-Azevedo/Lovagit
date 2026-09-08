@@ -122,6 +122,33 @@ export async function deleteSecret(name: string): Promise<void> {
   await chrome.storage.local.remove(SECRET_PREFIX + name);
 }
 
+/**
+ * Todos os segredos, em texto puro, para o backup.
+ *
+ * A chave mestra do cofre e' NAO exportavel de proposito, entao copiar os
+ * blobs cifrados nao adianta: na instalacao nova nasce outra chave mestra e
+ * nada abre. O backup leva o conteudo decifrado — e por isso ele proprio sai
+ * cifrado com a senha que o usuario escolhe.
+ */
+export async function exportSecrets(): Promise<Record<string, string>> {
+  const tudo = await chrome.storage.local.get(null);
+  const nomes = Object.keys(tudo)
+    .filter((chave) => chave.startsWith(SECRET_PREFIX))
+    .map((chave) => chave.slice(SECRET_PREFIX.length));
+
+  const pares = await Promise.all(
+    nomes.map(async (nome) => [nome, await getSecret(nome)] as const),
+  );
+  return Object.fromEntries(pares.filter((par): par is [string, string] => par[1] !== null));
+}
+
+/** Regrava os segredos do backup, agora sob a chave mestra desta instalacao. */
+export async function importSecrets(entries: Record<string, string>): Promise<number> {
+  const nomes = Object.keys(entries);
+  await Promise.all(nomes.map((nome) => setSecret(nome, entries[nome])));
+  return nomes.length;
+}
+
 export async function hasSecret(name: string): Promise<boolean> {
   const stored = await chrome.storage.local.get(SECRET_PREFIX + name);
   return Boolean(stored[SECRET_PREFIX + name]);
