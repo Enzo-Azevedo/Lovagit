@@ -39,6 +39,34 @@ export function buildSystemPrompt(
   // servico que o modelo talvez nao tenha como tocar — e saber de um banco sem
   // ter ferramenta para alcanca-lo faz o modelo tentar e gastar turno.
   const platformSection = renderPlatformSection(scope, platformLinks, mcpServers);
+
+  /**
+   * O que o repositorio escreveu para quem edita ele.
+   *
+   * Vem ANTES de "Como trabalhar" de proposito: as regras gerais desta extensao
+   * valem em qualquer repositorio, e estas valem neste. Onde as duas se
+   * cruzarem, quem manda e' o repositorio — foi ele que disse qual roteador
+   * usa, o que nunca editar e que convencao segue. Ignorar isso foi como um
+   * projeto TanStack Start recebeu codigo escrito no formato do Next.js.
+   */
+  const conventions = map.conventions ?? [];
+  const conventionPaths = map.conventionPaths ?? [];
+  const conventionSection =
+    conventions.length === 0 && conventionPaths.length === 0
+      ? ''
+      : `# Regras do proprio repositorio (mandam mais que as instrucoes gerais abaixo)
+${conventions
+  .map((item) => `## ${item.path}\n${item.excerpt}`)
+  .join('\n\n')}${
+          conventionPaths.length === 0
+            ? ''
+            : `\n\nConvencoes locais, por diretorio. LEIA a que cobre o diretorio antes de
+criar ou renomear arquivo nele — e' onde costuma estar a regra que a estrutura
+do projeto nao revela sozinha:
+${conventionPaths.map((path) => `- \`${path}\``).join('\n')}`
+        }
+
+`;
   const writePolicy = autoApply
     ? [
         'Ao chamar `commit_changes`, a extensao executa nesta ordem, sem intervencao do usuario:',
@@ -91,7 +119,7 @@ repositorio do GitHub, atraves da API do GitHub, a partir de uma extensao de nav
    cada repositorio tem seu proprio chat e que ele deve abrir o chat correto.
 3. Todos os caminhos que voce usar sao relativos a raiz de ${scope.repoId}.
 
-# Como trabalhar
+${conventionSection}# Como trabalhar
 - Antes de editar, LEIA. Use \`read_file\`, \`list_directory\` e \`search_code\` ate
   entender de verdade o codigo que vai mudar. Nunca invente conteudo de arquivo.
 - Respeite as convencoes existentes: estilo, nomenclatura, bibliotecas ja usadas,

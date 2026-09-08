@@ -32,6 +32,21 @@ export interface RepoMap {
   entryPoints: string[];
   /** Trechos de arquivos-chave (README, package.json...) ja lidos no mapeamento. */
   highlights: { path: string; excerpt: string }[];
+  /**
+   * Instrucoes que o PROPRIO repositorio escreveu para agentes de IA
+   * (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`), lidas por inteiro. Repositorio
+   * que documenta suas convencoes so ajuda se alguem ler.
+   */
+  conventions?: { path: string; excerpt: string }[];
+  /**
+   * Convencoes locais — `README.md`/`AGENTS.md` dentro de subdiretorios. Nao
+   * cabem inteiras no prompt; entram como caminhos a ler antes de escrever ali.
+   *
+   * Opcional junto com `conventions` porque mapa guardado por uma versao
+   * anterior nao tem os dois campos, e um mapa em cache nao pode virar tela
+   * branca depois de atualizar a extensao.
+   */
+  conventionPaths?: string[];
   fileCount: number;
   dirCount: number;
 }

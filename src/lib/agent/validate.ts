@@ -236,3 +236,25 @@ export function describeProblems(problemas: ChangeProblem[]): string {
   }
   return linhas.join('\n');
 }
+
+/**
+ * Arquivo que a ferramentagem do projeto reescreve sozinha.
+ *
+ * Editar um destes e' trabalho perdido no melhor caso e build quebrada no pior.
+ * O caso concreto: a arvore de rotas do TanStack Router (`routeTree.gen.ts`)
+ * abre dizendo "You should NOT make any changes in this file as it will be
+ * overwritten" — e' derivada dos arquivos em `src/routes/`. Um agente que a
+ * edita a mao ou registra rota errada, ou registra rota que nao existe.
+ *
+ * A deteccao olha o conteudo ANTES do nome: o arquivo se declara gerado no
+ * proprio cabecalho, e isso vale para qualquer ferramenta, nao so para as que
+ * usam a convencao `.gen.`.
+ */
+export function isGeneratedFile(path: string, previousContent: string | null): boolean {
+  if (/\.gen\.[cm]?[jt]sx?$/i.test(path)) return true;
+  if (previousContent === null) return false;
+  const cabecalho = previousContent.slice(0, 600);
+  return /@generated|auto-?generated|automatically generated|do not (?:edit|modify|make any changes)/i.test(
+    cabecalho,
+  );
+}

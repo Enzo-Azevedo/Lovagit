@@ -5,7 +5,7 @@ import { diffLines, diffStats } from '../diff';
 import { callMcpTool, mcpToolSchemas } from '../mcp/registry';
 import { parseNamespacedToolName } from '../mcp/protocol';
 import type { McpServerConfig } from '../mcp/types';
-import { describeProblems, findChangeProblems } from './validate';
+import { describeProblems, findChangeProblems, isGeneratedFile } from './validate';
 import type { PendingFileChange, RepoMap, ToolCall, ToolResult, TreeEntry } from '../types';
 import type { ToolSchema } from '../ai/types';
 import { ContextIsolationError, type RepoScope } from './isolation';
@@ -319,6 +319,16 @@ export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise
           } catch {
             previousContent = null;
           }
+        }
+
+        if (isGeneratedFile(path, previousContent)) {
+          return fail(
+            call,
+            `${path} e gerado pela ferramentagem do projeto e sera' sobrescrito — editar aqui ` +
+              'e trabalho perdido, ou build quebrada. Altere o arquivo de origem que da' +
+              ' origem a ele (por exemplo, o arquivo de rota em vez da arvore de rotas) e ' +
+              'deixe a geracao acontecer no build.',
+          );
         }
 
         const change: PendingFileChange = {

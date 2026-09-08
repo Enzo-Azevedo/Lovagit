@@ -31,6 +31,35 @@ const MANIFEST_FILES = [
 
 const README_CANDIDATES = ['README.md', 'readme.md', 'README.MD', 'Readme.md', 'README'];
 
+/**
+ * Arquivos que o repositorio escreve PARA agentes de IA.
+ *
+ * Sao diferentes do README: o README explica o projeto a uma pessoa; estes
+ * ditam como o agente deve trabalhar aqui — qual roteador, o que nunca editar,
+ * que convencao seguir. Um repositorio TanStack Start, por exemplo, avisa nesses
+ * arquivos que a arvore de rotas e' gerada e que `src/pages/` e' de outro
+ * framework. Sem le-los, o agente escreve o codigo do framework errado e a
+ * build de quem consome a branch quebra.
+ */
+const AGENT_FILES = [
+  'AGENTS.md',
+  'CLAUDE.md',
+  '.cursorrules',
+  '.github/copilot-instructions.md',
+];
+
+/** Teto de convencoes locais listadas. O suficiente para orientar, sem virar
+ *  uma lista que ninguem le. */
+const MAX_CONVENTION_PATHS = 12;
+
+/** `README.md`/`AGENTS.md` dentro de subdiretorio: convencao daquele lugar. */
+export function findConventionPaths(paths: string[]): string[] {
+  return paths
+    .filter((path) => path.includes('/') && /(?:^|\/)(?:README\.md|AGENTS\.md)$/i.test(path))
+    .sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))
+    .slice(0, MAX_CONVENTION_PATHS);
+}
+
 const ENTRY_POINT_CANDIDATES = [
   'src/main.tsx',
   'src/main.ts',
@@ -206,12 +235,25 @@ export async function buildRepoMap(
   const manifests: Record<string, string> = {};
   const highlights: RepoMap['highlights'] = [];
 
-  const readme = README_CANDIDATES.find((candidate) => pathSet.has(candidate));
-  const toRead = [...(readme ? [readme] : []), ...MANIFEST_FILES.filter((f) => pathSet.has(f))];
+  const conventions: RepoMap['conventions'] = [];
 
-  for (const path of toRead.slice(0, 8)) {
+  const readme = README_CANDIDATES.find((candidate) => pathSet.has(candidate));
+  const agentFiles = AGENT_FILES.filter((f) => pathSet.has(f));
+  const toRead = [
+    ...agentFiles,
+    ...(readme ? [readme] : []),
+    ...MANIFEST_FILES.filter((f) => pathSet.has(f)),
+  ];
+
+  for (const path of toRead.slice(0, 10)) {
     try {
       const file = await getFileContent(repo.owner, repo.name, path, headSha);
+      if (agentFiles.includes(path)) {
+        // Instrucao para agente vai INTEIRA, com folga: cortar a regra pela
+        // metade e' o mesmo que nao ter a regra.
+        conventions.push({ path, excerpt: excerpt(file.content, 4000) });
+        continue;
+      }
       if (path !== readme) manifests[path] = file.content;
       highlights.push({ path, excerpt: excerpt(file.content, path === readme ? 2000 : 1200) });
     } catch {
@@ -230,6 +272,8 @@ export async function buildRepoMap(
     stack: detectStack(paths, manifests),
     entryPoints: pickEntryPoints(paths),
     highlights,
+    conventions,
+    conventionPaths: findConventionPaths(paths),
     fileCount: paths.length,
     dirCount: entries.filter((e) => e.type === 'tree').length,
   };
