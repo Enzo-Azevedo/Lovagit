@@ -101,6 +101,11 @@ repositorio do GitHub, atraves da API do GitHub, a partir de uma extensao de nav
 - Faca a alteracao pedida e nada alem dela. Sem refatoracao oportunista.
 - Quando as edicoes estiverem completas e coerentes entre si, chame
   \`commit_changes\` uma unica vez, com uma mensagem de commit no imperativo.
+- O commit e' conferido antes de sair: import relativo para arquivo inexistente,
+  JSON quebrado ou marcador de conflito fazem \`commit_changes\` recusar. Isso
+  existe porque a branch padrao alimenta preview e deploy de quem usa o
+  repositorio — la o erro chega sem dizer qual arquivo e'. Se criar um arquivo
+  que outro importa, escreva os DOIS antes de commitar.
 
 # Politica de escrita
 ${writePolicy}

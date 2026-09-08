@@ -5,6 +5,7 @@ import { diffLines, diffStats } from '../diff';
 import { callMcpTool, mcpToolSchemas } from '../mcp/registry';
 import { parseNamespacedToolName } from '../mcp/protocol';
 import type { McpServerConfig } from '../mcp/types';
+import { describeProblems, findChangeProblems } from './validate';
 import type { PendingFileChange, RepoMap, ToolCall, ToolResult, TreeEntry } from '../types';
 import type { ToolSchema } from '../ai/types';
 import { ContextIsolationError, type RepoScope } from './isolation';
@@ -111,7 +112,10 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
     name: 'commit_changes',
     description:
       'Finaliza as alteracoes pendentes: cria a branch de backup e commita na branch padrao. ' +
-      'Chame uma unica vez, quando todas as edicoes estiverem completas.',
+      'Chame uma unica vez, quando todas as edicoes estiverem completas. Antes de commitar, ' +
+      'a extensao confere o que quebraria a build de quem consome a branch — JSON invalido, ' +
+      'marcador de conflito e import relativo apontando para arquivo que nao existe. ' +
+      'Havendo qualquer um, o commit e recusado com o motivo: corrija e chame de novo.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -356,12 +360,22 @@ export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise
         if (changes.length === 0) {
           return fail(call, 'Nao ha alteracoes pendentes para commitar.');
         }
+
+        // Ultima conferencia antes de a branch padrao mudar. Quem consome essa
+        // branch — o preview do Lovable, um deploy automatico — so descobre o
+        // erro depois, e a mensagem que chega la nao diz qual arquivo e'.
+        const problemas = findChangeProblems(changes, runtime.blobsByPath.keys());
+        if (problemas.some((problema) => problema.level === 'blocking')) {
+          return fail(call, describeProblems(problemas));
+        }
+        const aviso = describeProblems(problemas);
         if (!runtime.autoApply) {
           runtime.onAwaitingApproval(message);
           return ok(
             call,
             `${changes.length} alteracao(oes) prontas e aguardando aprovacao manual do usuario na interface. ` +
-              'Explique o que foi feito e encerre o turno; nao chame commit_changes de novo.',
+              'Explique o que foi feito e encerre o turno; nao chame commit_changes de novo.' +
+              (aviso ? `\n\n${aviso}` : ''),
           );
         }
         const result = await applyChanges(
@@ -377,6 +391,7 @@ export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise
             `Commit aplicado em ${runtime.scope.defaultBranch}: ${result.checkpoint.commitSha.slice(0, 7)}`,
             `Backup criado antes do commit: ${result.checkpoint.backupBranch}`,
             `Arquivos: ${changes.map((c) => `${c.action[0].toUpperCase()} ${c.path}`).join(', ')}`,
+            ...(aviso ? ['', aviso] : []),
           ].join('\n'),
         );
       }
