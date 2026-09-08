@@ -35,7 +35,10 @@ export function buildSystemPrompt(
   // Mesmo escopo, mesma regra: so entra o que foi resolvido para ESTE
   // repositorio. Conectar um servico e nao contar ao modelo qual projeto e' o
   // dele deixaria a conexao inutil — ou pior, o faria caçar entre todos.
-  const platformSection = renderPlatformSection(scope, platformLinks);
+  // Os servidores MCP entram aqui de proposito: sem eles, a secao anunciaria um
+  // servico que o modelo talvez nao tenha como tocar — e saber de um banco sem
+  // ter ferramenta para alcanca-lo faz o modelo tentar e gastar turno.
+  const platformSection = renderPlatformSection(scope, platformLinks, mcpServers);
   const writePolicy = autoApply
     ? [
         'Ao chamar `commit_changes`, a extensao executa nesta ordem, sem intervencao do usuario:',

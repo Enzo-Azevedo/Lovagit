@@ -103,3 +103,29 @@ export interface PlatformConnection {
  *    que o usuario ja sabia.
  */
 export type PlatformLinks = Record<string, Record<string, string>>;
+
+/**
+ * O que a URL de um servidor MCP declara sobre o proprio alcance.
+ *
+ * O do Supabase aceita `?read_only=true` (executa como usuario Postgres
+ * somente-leitura) e `?project_ref=...` (limita a um projeto). Isso importa
+ * porque e' a UNICA restricao que vale de verdade: o que se escreve no prompt
+ * e' pedido, o que esta na URL e' o servidor recusando.
+ */
+export interface McpScope {
+  readOnly: boolean;
+  /** `null` = o servidor alcanca todos os projetos da conta. */
+  projectRef: string | null;
+}
+
+export function parseMcpScope(url: string): McpScope {
+  try {
+    const params = new URL(url).searchParams;
+    return {
+      readOnly: params.get('read_only') === 'true',
+      projectRef: params.get('project_ref'),
+    };
+  } catch {
+    return { readOnly: false, projectRef: null };
+  }
+}

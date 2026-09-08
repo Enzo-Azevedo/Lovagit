@@ -11,7 +11,14 @@ import {
 } from '../lib/platforms/store';
 import { getSettings } from '../lib/storage';
 import type { RepoId } from '../lib/types';
-import { PLATFORMS, type PlatformConnection, type PlatformId } from '../lib/platforms/types';
+import {
+  PLATFORMS,
+  platformForMcpUrl,
+  type PlatformConnection,
+  type PlatformId,
+} from '../lib/platforms/types';
+import { getMcpServers } from '../lib/mcp/registry';
+import type { McpServerConfig } from '../lib/mcp/types';
 
 const inputClass =
   'w-full rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs text-ink-200 outline-none placeholder:text-ink-600 focus:border-ink-600';
@@ -35,6 +42,7 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
   const [repoIds, setRepoIds] = useState<RepoId[]>([]);
   /** plataforma -> repositorio -> ref do projeto. */
   const [links, setLinks] = useState<Record<string, Record<string, string>>>({});
+  const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
 
   const reload = useCallback(async () => {
     const lista = await getPlatformConnections();
@@ -45,6 +53,7 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
     setDrafts(Object.fromEntries(tokens));
     setRepoIds((await getSettings()).connectedRepoIds);
     setLinks(await getPlatformLinks());
+    setMcpServers(await getMcpServers());
   }, []);
 
   const vincular = useCallback(
@@ -192,6 +201,7 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
                           <span className="truncate font-mono text-[10px] text-ink-400">
                             {repoId}
                           </span>
+                          <div className="space-y-0.5">
                           <select
                             className={`rounded-md border bg-ink-950 px-2 py-1 text-[11px] outline-none ${
                               escolhido
@@ -211,6 +221,19 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
                               </option>
                             ))}
                           </select>
+                          {escolhido &&
+                            !mcpServers.some(
+                              (server) =>
+                                server.enabledRepoIds.includes(repoId) &&
+                                platformForMcpUrl(server.url)?.id === plataforma.id,
+                            ) && (
+                              <p className="text-[10px] text-lov-orange">
+                                Vinculado, mas sem servidor MCP do {plataforma.label} habilitado
+                                para este repositorio — a IA sabe do projeto e nao tem como
+                                acessa-lo.
+                              </p>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
