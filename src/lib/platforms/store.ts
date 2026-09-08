@@ -1,9 +1,13 @@
+import { assertRepoId } from '../storage';
+import type { RepoPlatformLink } from './prompt';
+import type { RepoId } from '../types';
 import { deleteSecret, getSecret, SecretNames, setSecret } from '../vault';
 import {
   PLATFORMS,
   platformForMcpUrl,
   type PlatformConnection,
   type PlatformId,
+  type PlatformProject,
 } from './types';
 
 /**
@@ -15,6 +19,7 @@ import {
  */
 
 const KEY = 'platforms:connections';
+const LINKS_KEY = 'platforms:links';
 
 export async function getPlatformConnections(): Promise<PlatformConnection[]> {
   const stored = await chrome.storage.local.get(KEY);
@@ -75,4 +80,89 @@ export async function getPlatformToken(id: PlatformId): Promise<string | null> {
 export async function platformTokenForMcpUrl(url: string): Promise<string | null> {
   const plataforma = platformForMcpUrl(url);
   return plataforma ? getPlatformToken(plataforma.id) : null;
+}
+
+/**
+ * Vinculo repositorio -> projeto.
+ *
+ * Guardado por plataforma e por repositorio, e lido sempre com o repositorio em
+ * mao: nao existe funcao que devolva "o projeto" sem dizer de quem. E' o mesmo
+ * desenho da memoria — a estrutura torna dificil vazar de um chat para outro.
+ */
+export async function getPlatformLinks(): Promise<Record<string, Record<string, string>>> {
+  const stored = await chrome.storage.local.get(LINKS_KEY);
+  return (stored[LINKS_KEY] as Record<string, Record<string, string>> | undefined) ?? {};
+}
+
+/** `null` quando o repositorio nao tem projeto escolhido — nunca um chute. */
+export async function getRepoProjectRef(
+  platformId: PlatformId,
+  repoId: RepoId,
+): Promise<string | null> {
+  assertRepoId(repoId);
+  const links = await getPlatformLinks();
+  return links[platformId]?.[repoId] ?? null;
+}
+
+/** Passar `null` desfaz o vinculo. */
+export async function setRepoProjectRef(
+  platformId: PlatformId,
+  repoId: RepoId,
+  ref: string | null,
+): Promise<void> {
+  assertRepoId(repoId);
+  const links = await getPlatformLinks();
+  const daPlataforma = { ...(links[platformId] ?? {}) };
+  if (ref) daPlataforma[repoId] = ref;
+  else delete daPlataforma[repoId];
+  await chrome.storage.local.set({ [LINKS_KEY]: { ...links, [platformId]: daPlataforma } });
+}
+
+/** Tira o repositorio de todos os vinculos — usado ao desconectar um repo. */
+export async function pruneRepoFromLinks(repoId: RepoId): Promise<void> {
+  const links = await getPlatformLinks();
+  const limpo = Object.fromEntries(
+    Object.entries(links).map(([plataforma, mapa]) => {
+      const copia = { ...mapa };
+      delete copia[repoId];
+      return [plataforma, copia];
+    }),
+  );
+  await chrome.storage.local.set({ [LINKS_KEY]: limpo });
+}
+
+/**
+ * O projeto DESTE repositorio, pronto para o system prompt.
+ *
+ * Devolve o objeto inteiro (nome junto do ref) porque o prompt precisa dos dois:
+ * o ref para as ferramentas usarem, o nome para o modelo conseguir conversar
+ * sobre o projeto com o usuario sem falar em codigo de identificacao.
+ */
+export async function getRepoProject(
+  platformId: PlatformId,
+  repoId: RepoId,
+): Promise<PlatformProject | null> {
+  const ref = await getRepoProjectRef(platformId, repoId);
+  if (!ref) return null;
+  const conexao = (await getPlatformConnections()).find((item) => item.id === platformId);
+  if (!conexao?.hasToken) return null;
+  return conexao.projects?.find((projeto) => projeto.ref === ref) ?? { ref, name: ref };
+}
+
+/**
+ * Todos os vinculos DESTE repositorio, prontos para o system prompt.
+ *
+ * Plataforma sem token, ou com token mas sem projeto escolhido, simplesmente
+ * nao entra. E' de proposito: metade da informacao ("existe um Supabase, mas
+ * nao sei qual projeto") e' pior do que nenhuma — convida o modelo a procurar.
+ */
+export async function platformLinksForRepo(repoId: RepoId): Promise<RepoPlatformLink[]> {
+  assertRepoId(repoId);
+  const resolvidos = await Promise.all(
+    PLATFORMS.map(async (plataforma) => {
+      const project = await getRepoProject(plataforma.id, repoId);
+      return project ? { platformId: plataforma.id, project } : null;
+    }),
+  );
+  return resolvidos.filter((item): item is RepoPlatformLink => item !== null);
 }

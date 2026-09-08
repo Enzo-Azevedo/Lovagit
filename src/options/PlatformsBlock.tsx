@@ -3,10 +3,14 @@ import { requestHostPermission } from '../lib/mcp/permissions';
 import { checkSupabaseToken } from '../lib/platforms/supabase';
 import {
   getPlatformConnections,
+  getPlatformLinks,
   getPlatformToken,
   setPlatformToken,
+  setRepoProjectRef,
   updatePlatformConnection,
 } from '../lib/platforms/store';
+import { getSettings } from '../lib/storage';
+import type { RepoId } from '../lib/types';
 import { PLATFORMS, type PlatformConnection, type PlatformId } from '../lib/platforms/types';
 
 const inputClass =
@@ -28,6 +32,9 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [revelado, setRevelado] = useState<Record<string, boolean>>({});
   const [ocupado, setOcupado] = useState<PlatformId | null>(null);
+  const [repoIds, setRepoIds] = useState<RepoId[]>([]);
+  /** plataforma -> repositorio -> ref do projeto. */
+  const [links, setLinks] = useState<Record<string, Record<string, string>>>({});
 
   const reload = useCallback(async () => {
     const lista = await getPlatformConnections();
@@ -36,7 +43,17 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
       lista.map(async (conexao) => [conexao.id, (await getPlatformToken(conexao.id)) ?? ''] as const),
     );
     setDrafts(Object.fromEntries(tokens));
+    setRepoIds((await getSettings()).connectedRepoIds);
+    setLinks(await getPlatformLinks());
   }, []);
+
+  const vincular = useCallback(
+    async (platformId: PlatformId, repoId: RepoId, ref: string) => {
+      await setRepoProjectRef(platformId, repoId, ref || null);
+      setLinks(await getPlatformLinks());
+    },
+    [],
+  );
 
   useEffect(() => {
     void reload();
@@ -69,6 +86,9 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
           lastCheck: check.ok ? check.message : undefined,
           lastCheckedAt: check.ok ? Date.now() : undefined,
           lastError: check.ok ? undefined : check.message,
+          // A lista fica guardada para a tela oferecer as opcoes sem bater na
+          // API a cada render.
+          projects: check.ok ? check.projects : undefined,
         });
         onMessage(check.message);
       } finally {
@@ -155,6 +175,56 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
               {plataforma.scopeWarning} Fica no cofre cifrado, e serve tambem para o servidor MCP do
               proprio {plataforma.label} — sem precisar cadastrar duas vezes.
             </p>
+
+            {conexao?.hasToken && (
+              <div className="space-y-1 border-t border-ink-800 pt-2">
+                <p className="text-[11px] text-ink-200">Projeto de cada repositorio</p>
+                {repoIds.length === 0 ? (
+                  <p className="text-[10px] text-ink-400">
+                    Conecte um repositorio no painel lateral para poder vincular aqui.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {repoIds.map((repoId) => {
+                      const escolhido = links[plataforma.id]?.[repoId] ?? '';
+                      return (
+                        <div key={repoId} className="grid grid-cols-[1fr_1.2fr] items-center gap-2">
+                          <span className="truncate font-mono text-[10px] text-ink-400">
+                            {repoId}
+                          </span>
+                          <select
+                            className={`rounded-md border bg-ink-950 px-2 py-1 text-[11px] outline-none ${
+                              escolhido
+                                ? 'border-ink-700 text-ink-200'
+                                : 'border-lov-orange/40 text-ink-400'
+                            }`}
+                            value={escolhido}
+                            onChange={(event) =>
+                              void vincular(plataforma.id, repoId, event.target.value)
+                            }
+                          >
+                            <option value="">Nenhum — a IA nao vera este servico</option>
+                            {(conexao.projects ?? []).map((projeto) => (
+                              <option key={projeto.ref} value={projeto.ref}>
+                                {projeto.name}
+                                {projeto.region ? ` (${projeto.region})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-[10px] text-ink-400">
+                  A escolha e' obrigatoria e nao tem padrao. Sem ela o chat daquele repositorio nem
+                  fica sabendo que o {plataforma.label} existe — o que e' melhor do que saber pela
+                  metade: o token alcanca a conta inteira, e um modelo que sabe do servico mas nao
+                  do projeto sai listando todos e tentando ate acertar, num turno pago para achar
+                  o que voce ja sabia. Com o vinculo, o ref do projeto vai escrito no prompt.
+                </p>
+              </div>
+            )}
           </div>
         );
       })}

@@ -1,4 +1,4 @@
-import { platformById } from './types';
+import { platformById, type PlatformProject } from './types';
 
 /**
  * Verificacao do token do Supabase contra a Management API.
@@ -10,6 +10,8 @@ import { platformById } from './types';
  */
 
 interface ProjetoDaApi {
+  /** No Supabase, o `id` da Management API E' o project ref usado nas
+   *  ferramentas. Guardar o nome sozinho nao serviria para chamar nada. */
   id?: string;
   name?: string;
   region?: string;
@@ -18,8 +20,8 @@ interface ProjetoDaApi {
 export interface PlatformCheck {
   ok: boolean;
   message: string;
-  /** Nomes dos projetos que o token enxerga. Vazio nao e' erro. */
-  projects: string[];
+  /** Projetos que o token enxerga. Vazio nao e' erro. */
+  projects: PlatformProject[];
 }
 
 export async function checkSupabaseToken(token: string): Promise<PlatformCheck> {
@@ -58,16 +60,22 @@ export async function checkSupabaseToken(token: string): Promise<PlatformCheck> 
   }
 
   const payload = (await response.json().catch(() => [])) as ProjetoDaApi[];
-  const projects = (Array.isArray(payload) ? payload : [])
-    .map((projeto) => projeto.name)
-    .filter((nome): nome is string => typeof nome === 'string' && nome.length > 0)
-    .sort();
+  const projects: PlatformProject[] = (Array.isArray(payload) ? payload : [])
+    // Sem `id` nao da para vincular nada: o ref e' o que as ferramentas usam.
+    .filter((projeto) => typeof projeto.id === 'string' && projeto.id.length > 0)
+    .map((projeto) => ({
+      ref: projeto.id as string,
+      name: projeto.name ?? (projeto.id as string),
+      region: projeto.region,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
+  const nomes = projects.map((projeto) => projeto.name);
   return {
     ok: true,
     message:
       projects.length > 0
-        ? `Token valido — ${projects.length} projeto(s): ${projects.slice(0, 5).join(', ')}${projects.length > 5 ? '…' : ''}`
+        ? `Token valido — ${projects.length} projeto(s): ${nomes.slice(0, 5).join(', ')}${nomes.length > 5 ? '…' : ''}`
         : 'Token valido, mas a conta nao tem projeto nenhum ainda.',
     projects,
   };

@@ -17,6 +17,7 @@ import {
 import { buildSystemPrompt } from './prompt';
 import type { McpServerConfig } from '../mcp/types';
 import type { MemoryEntry } from '../memory/types';
+import type { RepoPlatformLink } from '../platforms/prompt';
 import type { NewMemoryEntry } from '../memory/store';
 import { extractRule } from '../memory/rules';
 import { buildToolSchemas, executeTool, indexBlobsByPath, type ToolRuntime } from './tools';
@@ -71,6 +72,8 @@ export interface RunAgentOptions {
   mcpServers: McpServerConfig[];
   /** Memoria ja gravada DESTE repositorio, para o system prompt. */
   memory: MemoryEntry[];
+  /** Projetos de plataforma vinculados a ESTE repositorio (ja resolvidos). */
+  platformLinks?: RepoPlatformLink[];
   signal?: AbortSignal;
   onEvent: (event: AgentEvent) => void;
 }
@@ -134,6 +137,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     options.autoApply,
     options.mcpServers,
     options.memory,
+    options.platformLinks ?? [],
   );
   const tools = buildToolSchemas(options.mcpServers);
   const produced: ChatMessage[] = [];

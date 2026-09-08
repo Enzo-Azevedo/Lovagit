@@ -11,6 +11,7 @@ import {
   saveSettings,
 } from '../lib/storage';
 import { pruneRepoFromServers } from '../lib/mcp/registry';
+import { pruneRepoFromLinks } from '../lib/platforms/store';
 import { captureError } from '../lib/telemetry/reporter';
 import type { RepoId, RepoRef, Settings } from '../lib/types';
 import { hasSecret, SecretNames } from '../lib/vault';
@@ -132,6 +133,9 @@ export function useRepos() {
     async (repoId: RepoId) => {
       await disconnectRepo(repoId);
       await pruneRepoFromServers(repoId);
+      // O vinculo com o projeto da plataforma tambem some: repositorio
+      // desconectado nao pode deixar para tras um ponteiro para um banco.
+      await pruneRepoFromLinks(repoId);
       await refresh();
     },
     [refresh],

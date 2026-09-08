@@ -3,6 +3,7 @@ import { createProvider } from '../lib/ai/registry';
 import { runAgent, type AgentEvent } from '../lib/agent/loop';
 import { createScope } from '../lib/agent/isolation';
 import { applyChangesToMap } from '../lib/github/mapper';
+import { platformLinksForRepo } from '../lib/platforms/store';
 import { getServersForRepo } from '../lib/mcp/registry';
 import { captureError } from '../lib/telemetry/reporter';
 import { RETRY_DELAY_SECONDS, shouldAutoRetry } from '../lib/agent/retry';
@@ -267,6 +268,9 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         // Le a memoria ANTES do turno: o que for gravado agora vale do proximo em
         // diante, para o modelo nunca ver o proprio registro no mesmo prompt.
         const memoriaAtual = await loadMemory(repo.id);
+        // Qual projeto de cada plataforma pertence a ESTE repositorio. Sem
+        // isto, conectar o Supabase nas configuracoes nunca chegaria ao modelo.
+        const vinculos = await platformLinksForRepo(repo.id);
 
         const onEvent = (event: AgentEvent) => {
           switch (event.type) {
@@ -335,6 +339,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           connectedRepoIds: settings.connectedRepoIds,
           mcpServers,
           memory: memoriaAtual,
+          platformLinks: vinculos,
           signal: controller.signal,
           onEvent,
         });

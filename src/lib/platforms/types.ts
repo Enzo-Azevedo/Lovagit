@@ -63,6 +63,19 @@ export function platformForMcpUrl(url: string): PlatformDefinition | undefined {
   return PLATFORMS.find((platform) => platform.mcpHosts.includes(host));
 }
 
+/**
+ * Um projeto dentro da conta da plataforma.
+ *
+ * O `ref` e' o identificador que as ferramentas usam (no Supabase, o
+ * `project_id`); o nome e' so para a tela — dois projetos podem ter nomes
+ * parecidos, e escolher pelo nome errado e' escolher o banco errado.
+ */
+export interface PlatformProject {
+  ref: string;
+  name: string;
+  region?: string;
+}
+
 /** Estado de uma conexao, guardado em claro — o token fica no cofre. */
 export interface PlatformConnection {
   id: PlatformId;
@@ -71,4 +84,22 @@ export interface PlatformConnection {
   lastCheck?: string;
   lastCheckedAt?: number;
   lastError?: string;
+  /** Projetos vistos no ultimo teste. E' a lista que a tela oferece para
+   *  escolher, sem precisar chamar a API a cada render. */
+  projects?: PlatformProject[];
 }
+
+/**
+ * Qual projeto cada repositorio usa, por plataforma.
+ *
+ * Nao ha padrao e nao ha "todos": a escolha e' obrigatoria e explicita. Duas
+ * razoes, e as duas doem:
+ *
+ * 1. **Isolamento.** A conta inteira do Supabase esta ao alcance do token. Sem
+ *    o vinculo, o chat do repositorio X poderia mexer no banco do projeto Y —
+ *    exatamente o cruzamento que esta extensao existe para impedir.
+ * 2. **Custo.** Sem saber qual e' o projeto, o modelo lista todos e vai
+ *    tentando ate acertar. Cada tentativa e' um turno pago para descobrir algo
+ *    que o usuario ja sabia.
+ */
+export type PlatformLinks = Record<string, Record<string, string>>;

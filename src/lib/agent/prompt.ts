@@ -2,6 +2,7 @@ import { summarizeTree } from '../github/mapper';
 import { renderMemorySection } from '../memory/prompt';
 import type { MemoryEntry } from '../memory/types';
 import { namespacedToolName } from '../mcp/protocol';
+import { renderPlatformSection, type RepoPlatformLink } from '../platforms/prompt';
 import type { McpServerConfig } from '../mcp/types';
 import type { RepoMap } from '../types';
 import type { RepoScope } from './isolation';
@@ -26,10 +27,15 @@ export function buildSystemPrompt(
   autoApply: boolean,
   mcpServers: McpServerConfig[] = [],
   memory: MemoryEntry[] = [],
+  platformLinks: RepoPlatformLink[] = [],
 ): string {
   // A memoria e' renderizada aqui dentro, a partir do mesmo escopo que o resto
   // do prompt: nao ha caminho por onde a memoria de outro repositorio entre.
   const memorySection = renderMemorySection(scope, memory);
+  // Mesmo escopo, mesma regra: so entra o que foi resolvido para ESTE
+  // repositorio. Conectar um servico e nao contar ao modelo qual projeto e' o
+  // dele deixaria a conexao inutil — ou pior, o faria caçar entre todos.
+  const platformSection = renderPlatformSection(scope, platformLinks);
   const writePolicy = autoApply
     ? [
         'Ao chamar `commit_changes`, a extensao executa nesta ordem, sem intervencao do usuario:',
@@ -112,6 +118,7 @@ gravar e' o momento em que a regra e' dita.
 O contrario tambem vale: pedido de hoje ("ajuste o header") nao e' regra e nao
 vai para a memoria. O trabalho feito ja fica registrado pelo proprio commit.
 
+${platformSection}
 ${memorySection}
 # Mapa do repositorio
 ${summarizeTree(map.entries)}

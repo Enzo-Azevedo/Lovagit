@@ -48,13 +48,25 @@ describe('teste do token do Supabase', () => {
       vi.fn(async (url: string, init?: RequestInit) => {
         expect(String(url)).toBe('https://api.supabase.com/v1/projects');
         expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer sbp_abc');
-        return new Response(JSON.stringify([{ name: 'loja' }, { name: 'blog' }]), { status: 200 });
+        return new Response(
+          JSON.stringify([
+            { id: 'ref-loja', name: 'loja', region: 'sa-east-1' },
+            { id: 'ref-blog', name: 'blog' },
+            // Sem `id` nao da para chamar nada: o ref e' o que as ferramentas
+            // usam, e um projeto so com nome viraria uma opcao inutil na tela.
+            { name: 'projeto-sem-ref' },
+          ]),
+          { status: 200 },
+        );
       }),
     );
 
     const check = await checkSupabaseToken('  sbp_abc  ');
     expect(check.ok).toBe(true);
-    expect(check.projects).toEqual(['blog', 'loja']);
+    expect(check.projects).toEqual([
+      { ref: 'ref-blog', name: 'blog', region: undefined },
+      { ref: 'ref-loja', name: 'loja', region: 'sa-east-1' },
+    ]);
     expect(check.message).toContain('2 projeto');
   });
 
