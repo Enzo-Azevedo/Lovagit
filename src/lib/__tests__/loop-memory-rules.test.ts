@@ -125,3 +125,46 @@ describe('regra do usuario vira memoria sem ser pedida', () => {
     expect(memorias[0].summary).toBe('Estilo: aspas simples em todo o codigo');
   });
 });
+
+describe('retomada acompanha o turno, nao o chat', () => {
+  it('o modelo recebe o rascunho; a conversa guarda so o pedido', async () => {
+    // A retomada e' insumo para o modelo, nao conteudo da conversa: quem le o
+    // chat depois quer ver o proprio pedido, nao o rascunho de uma tentativa
+    // que morreu.
+    let recebido = '';
+    const provider: AIProvider = {
+      id: 'p1',
+      label: 'Provedor',
+      model: 'modelo-x',
+      complete: async (request) => {
+        recebido = request.turns.at(-1)?.text ?? '';
+        return {
+          text: 'pronto',
+          toolCalls: [],
+          stopReason: 'stop',
+          usage: { inputTokens: 0, outputTokens: 0 },
+        };
+      },
+    };
+
+    const mensagens = await runAgent({
+      scope: createScope(repo),
+      map,
+      history: [],
+      userText: 'ajuste o header',
+      provider,
+      autoApply: false,
+      connectedRepoIds: ['acme/site'],
+      mcpServers: [],
+      memory: [],
+      resumeHint: '# Retomada de um turno interrompido\nvoce ja tinha escrito X',
+      onEvent: () => {},
+    });
+
+    expect(recebido).toContain('ajuste o header');
+    expect(recebido).toContain('voce ja tinha escrito X');
+
+    const doUsuario = mensagens.find((mensagem) => mensagem.role === 'user');
+    expect(doUsuario?.content).toBe('ajuste o header');
+  });
+});

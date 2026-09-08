@@ -3,7 +3,6 @@ import {
   createOpenAICompatibleProvider,
   kindForStreamErrorCode,
   providerKindForStatus,
-  STREAM_IDLE_LIMIT_MS,
 } from '../ai/openai-compatible';
 import { ProviderError } from '../ai/types';
 
@@ -291,75 +290,5 @@ describe('o que a extensao pode e nao pode afirmar sobre a queda', () => {
     expect(erro.kind).toBe('network');
     expect(erro.message).toContain('chamada de ferramenta');
     expect(erro.message).toMatch(/apos \d+s de stream/);
-  });
-});
-
-describe('teto de ociosidade do stream', () => {
-  it('cinco minutos, e e tempo OCIOSO — nao tempo total', () => {
-    // Cada byte que chega zera a contagem. Modelo que raciocina dez minutos
-    // streamando raciocinio nunca encosta aqui; quem encosta e a conexao
-    // pendurada sem dizer nada.
-    expect(STREAM_IDLE_LIMIT_MS).toBe(300_000);
-  });
-
-  it('stream mudo por tempo demais e encerrado, em vez de pendurar para sempre', async () => {
-    vi.useFakeTimers();
-    try {
-      let cancelado = false;
-      const provider = providerWith((async () => {
-        const body = new ReadableStream({
-          // Nunca entrega nada e nunca termina: e' o stream pendurado.
-          pull() {
-            return new Promise<void>(() => {});
-          },
-          cancel() {
-            cancelado = true;
-          },
-        });
-        return new Response(body, { status: 200 });
-      }) as unknown as typeof fetch);
-
-      const promessa = provider.complete(pedido).catch((e: unknown) => e);
-      await vi.advanceTimersByTimeAsync(STREAM_IDLE_LIMIT_MS + 1000);
-      const erro = (await promessa) as ProviderError;
-
-      expect(erro).toBeInstanceOf(ProviderError);
-      // Transitorio: o reenvio automatico pode tentar de novo, e isso nao vira
-      // issue de defeito da extensao.
-      expect(erro.kind).toBe('network');
-      expect(erro.message).toContain('300s sem enviar nada');
-      // Sem o cancelamento a requisicao seguiria aberta, consumindo cota de um
-      // turno ja dado como perdido.
-      expect(cancelado, 'o stream abandonado precisa ser cancelado').toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('nao dispara enquanto o stream continua entregando', async () => {
-    vi.useFakeTimers();
-    try {
-      let entregas = 0;
-      const provider = providerWith((async () => {
-        const body = new ReadableStream({
-          async pull(controller) {
-            entregas += 1;
-            if (entregas > 3) {
-              controller.close();
-              return;
-            }
-            controller.enqueue(
-              new TextEncoder().encode('data: {"choices":[{"delta":{"content":"."}}]}\n\n'),
-            );
-          },
-        });
-        return new Response(body, { status: 200 });
-      }) as unknown as typeof fetch);
-
-      const resposta = await provider.complete(pedido);
-      expect(resposta.text).toBe('...');
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });

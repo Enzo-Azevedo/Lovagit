@@ -7,6 +7,8 @@ import { platformLinksForRepo } from '../lib/platforms/store';
 import { getServersForRepo } from '../lib/mcp/registry';
 import { captureError } from '../lib/telemetry/reporter';
 import { RETRY_DELAY_SECONDS, shouldAutoRetry } from '../lib/agent/retry';
+import { isWorthResuming, renderResumeHint } from '../lib/ai/partial';
+import { ProviderError } from '../lib/ai/types';
 import {
   clearRepoMemory,
   forgetMemoryEntry,
@@ -73,8 +75,11 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   const [retry, setRetry] = useState<{
     text: string;
     images: TurnImage[];
-    secondsLeft: number;
+    /** `null` = nao ha contagem: o reenvio espera um clique. */
+    secondsLeft: number | null;
     attempt: number;
+    /** O que o modelo ja tinha gerado antes de cair — vai junto no reenvio. */
+    resumeHint?: string;
   } | null>(null);
   const [status, setStatus] = useState('');
   const [running, setRunning] = useState(false);
@@ -233,7 +238,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   );
 
   const runTurn = useCallback(
-    async (text: string, tentativa = 0, imagens: TurnImage[] = []) => {
+    async (text: string, tentativa = 0, imagens: TurnImage[] = [], resumeHint?: string) => {
       if (!text || running) return;
       if (!activeProvider) {
         setError('Nenhuma IA conectada. Configure um provedor nas configuracoes.');
@@ -340,6 +345,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           mcpServers,
           memory: memoriaAtual,
           platformLinks: vinculos,
+          resumeHint,
           signal: controller.signal,
           onEvent,
         });
@@ -355,20 +361,29 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           providerKind: activeProvider.kind,
         });
 
-        if (
-          shouldAutoRetry({
-            enabled: settings.autoRetryOnFailure,
-            error: caught,
-            committed: commitouNesteTurno,
-          })
-        ) {
-          // O reenvio leva as MESMAS imagens: sem isso a segunda tentativa
-          // mandaria a pergunta sem a tela sobre a qual ela fala.
+        // O que o modelo ja tinha gerado viaja para a proxima tentativa. Sao
+        // tokens ja cobrados: recomecar do zero paga por eles outra vez.
+        const parcial = caught instanceof ProviderError ? caught.partial : undefined;
+        const resumeHint = isWorthResuming(parcial) ? renderResumeHint(parcial!) : undefined;
+        const reenviaSozinho = shouldAutoRetry({
+          enabled: settings.autoRetryOnFailure,
+          error: caught,
+          committed: commitouNesteTurno,
+        });
+
+        // Com o reenvio automatico ligado, a contagem corre. Sem ele, a faixa
+        // ainda aparece quando ha o que aproveitar: jogar fora geracao ja paga
+        // so porque a opcao esta desligada seria desperdicio por tecnicalidade.
+        //
+        // O reenvio leva as MESMAS imagens: sem isso a tentativa seguinte
+        // mandaria a pergunta sem a tela sobre a qual ela fala.
+        if (reenviaSozinho || resumeHint) {
           setRetry({
             text,
             images: imagens,
-            secondsLeft: RETRY_DELAY_SECONDS,
+            secondsLeft: reenviaSozinho ? RETRY_DELAY_SECONDS : null,
             attempt: tentativa + 1,
+            resumeHint,
           });
         }
       } finally {
@@ -394,14 +409,18 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   });
 
   useEffect(() => {
-    if (!retry) return;
+    if (!retry || retry.secondsLeft === null) return;
     if (retry.secondsLeft <= 0) {
       setRetry(null);
-      void runTurnRef.current(retry.text, retry.attempt, retry.images);
+      void runTurnRef.current(retry.text, retry.attempt, retry.images, retry.resumeHint);
       return;
     }
     const timer = setTimeout(() => {
-      setRetry((atual) => (atual ? { ...atual, secondsLeft: atual.secondsLeft - 1 } : null));
+      setRetry((atual) =>
+        atual && atual.secondsLeft !== null
+          ? { ...atual, secondsLeft: atual.secondsLeft - 1 }
+          : atual,
+      );
     }, 1000);
     return () => clearTimeout(timer);
   }, [retry]);
@@ -639,11 +658,32 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         {retry && (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-ink-700 bg-ink-900 p-2 text-xs text-ink-300">
             <span>
-              Falha passageira. Reenviando em {retry.secondsLeft}s (tentativa {retry.attempt})...
+              {retry.secondsLeft === null
+                ? 'A geracao parou no meio.'
+                : `Falha passageira. Reenviando em ${retry.secondsLeft}s (tentativa ${retry.attempt})...`}
+              {retry.resumeHint && ' O que ja foi gerado vai junto, para nao pagar duas vezes.'}
             </span>
-            <Button variant="ghost" onClick={() => setRetry(null)}>
-              Cancelar
-            </Button>
+            <span className="flex shrink-0 gap-1">
+              {retry.secondsLeft === null && (
+                <Button
+                  onClick={() => {
+                    const agendado = retry;
+                    setRetry(null);
+                    void runTurn(
+                      agendado.text,
+                      agendado.attempt,
+                      agendado.images,
+                      agendado.resumeHint,
+                    );
+                  }}
+                >
+                  Continuar
+                </Button>
+              )}
+              <Button variant="ghost" onClick={() => setRetry(null)}>
+                {retry.secondsLeft === null ? 'Descartar' : 'Cancelar'}
+              </Button>
+            </span>
           </div>
         )}
 

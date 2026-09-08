@@ -74,6 +74,14 @@ export interface RunAgentOptions {
   memory: MemoryEntry[];
   /** Projetos de plataforma vinculados a ESTE repositorio (ja resolvidos). */
   platformLinks?: RepoPlatformLink[];
+  /**
+   * O que o modelo ja tinha gerado num turno anterior que caiu.
+   *
+   * Acompanha o turno enviado ao provedor, mas NAO a mensagem gravada no chat:
+   * quem le a conversa quer ver o proprio pedido, nao o rascunho de uma
+   * tentativa que morreu.
+   */
+  resumeHint?: string;
   signal?: AbortSignal;
   onEvent: (event: AgentEvent) => void;
 }
@@ -164,7 +172,13 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
 
   const turns: ProviderTurn[] = [
     ...historyToTurns(options.history),
-    { role: 'user', text: options.userText, ...(imagens.length > 0 ? { images: imagens } : {}) },
+    {
+      role: 'user',
+      text: options.resumeHint
+        ? `${options.userText}\n\n${options.resumeHint}`
+        : options.userText,
+      ...(imagens.length > 0 ? { images: imagens } : {}),
+    },
   ];
 
   // Tudo que o usuario escreveu nesta conversa: separa "usuario citou outro

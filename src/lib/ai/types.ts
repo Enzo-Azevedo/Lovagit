@@ -1,3 +1,4 @@
+import type { PartialGeneration } from './partial';
 import type { ToolCall, ToolResult, TurnImage } from '../types';
 
 export interface ToolSchema {
@@ -79,6 +80,13 @@ export class ProviderError extends Error {
     message: string,
     readonly kind: ProviderErrorKind = 'protocol',
     readonly cause?: unknown,
+    /**
+     * O que o modelo ja tinha gerado quando a falha aconteceu.
+     *
+     * Viaja no erro porque e' o unico caminho que sobrevive ate quem decide o
+     * reenvio: sem isto, o turno morre levando junto tokens ja pagos.
+     */
+    readonly partial?: PartialGeneration,
   ) {
     super(message);
     this.name = 'ProviderError';
