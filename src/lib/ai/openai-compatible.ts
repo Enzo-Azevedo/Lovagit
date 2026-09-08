@@ -241,6 +241,55 @@ function normalizeBaseUrl(baseUrl: string): string {
   return trimmed.endsWith('/chat/completions') ? trimmed : `${trimmed}/chat/completions`;
 }
 
+/**
+ * Quanto tempo o stream pode ficar SEM ENTREGAR NADA antes de desistir.
+ *
+ * E' tempo ocioso, nao tempo total: cada byte que chega zera a contagem. Um
+ * modelo que raciocina por dez minutos streamando raciocinio nunca encosta
+ * neste limite; quem encosta e' a conexao que ficou pendurada sem dizer nada.
+ *
+ * Antes nao havia limite algum. Um stream pendurado ficava pendurado para
+ * sempre — a extensao girando o indicador de "trabalhando" sem nada por tras, e
+ * o usuario sem saber se esperava ou recarregava. Cinco minutos e' folgado o
+ * bastante para pensamento longo de verdade e curto o bastante para nao virar
+ * espera infinita.
+ */
+export const STREAM_IDLE_LIMIT_MS = 300_000;
+
+/** Interna: o stream parou de dar sinal. Nunca escapa deste modulo. */
+class StreamStalled extends Error {
+  constructor(readonly idleMs: number) {
+    super(`Stream parado por ${Math.round(idleMs / 1000)}s`);
+    this.name = 'StreamStalled';
+  }
+}
+
+/**
+ * Le do stream com teto de ociosidade.
+ *
+ * O `reader.read()` que perdeu a corrida continua pendente, e com ele a
+ * requisicao — por isso o cancelamento explicito: sem ele, a conexao ficaria
+ * aberta consumindo cota de um turno que ja foi dado como perdido.
+ */
+async function readWithIdleLimit<T>(
+  reader: ReadableStreamDefaultReader<T>,
+  idleMs: number,
+): Promise<ReadableStreamReadResult<T>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const estouro = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new StreamStalled(idleMs)), idleMs);
+  });
+
+  try {
+    return await Promise.race([reader.read(), estouro]);
+  } catch (error) {
+    if (error instanceof StreamStalled) await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions): AIProvider {
   return {
     id: options.id,
@@ -365,7 +414,7 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
       const comecou = Date.now();
       try {
         while (true) {
-          const { done, value } = await reader.read();
+          const { done, value } = await readWithIdleLimit(reader, STREAM_IDLE_LIMIT_MS);
           if (done) break;
           buffer += value;
           const events = buffer.split('\n\n');
@@ -397,7 +446,10 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
         // issue e sem ninguem nunca descobrir. Erro que nao passa no
         // reconhecimento de falha de rede sobe cru, para ser classificado como
         // defeito da extensao e abrir issue.
-        if (!isNetworkFailure(error)) throw error;
+        // Parada por ociosidade entra pelo mesmo caminho da queda: nos dois casos
+        // o stream acabou antes da hora, e o que se faz com o parcial e' igual.
+        const parou = error instanceof StreamStalled;
+        if (!parou && !isNetworkFailure(error)) throw error;
 
         // Um tool call pela metade NUNCA pode ser aproveitado: o JSON truncado
         // viraria, por exemplo, um write_file com o arquivo cortado. Sem texto
@@ -412,8 +464,11 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
                 'A chamada incompleta foi descartada de proposito: um JSON cortado viraria uma acao errada'
               : 'antes de qualquer texto chegar';
           const segundos = Math.round((Date.now() - comecou) / 1000);
+          const causa = parou
+            ? `ficou ${Math.round(STREAM_IDLE_LIMIT_MS / 1000)}s sem enviar nada e foi encerrada`
+            : 'caiu';
           throw new ProviderError(
-            `A conexao com ${options.label} caiu ${perdido}, apos ${segundos}s de stream. ` +
+            `A conexao com ${options.label} ${causa} ${perdido}, apos ${segundos}s de stream. ` +
               'Tente enviar de novo.',
             'network',
             error,
