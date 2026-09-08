@@ -42,7 +42,10 @@ export function Options() {
   const [patStatus, setPatStatus] = useState<string | null>(null);
   // Separa "ja existe chave salva" (booleano) do rascunho digitado agora. Guardar
   // os dois no mesmo mapa faria o placeholder da chave salva ser gravado como chave.
-  const [hasProviderKey, setHasProviderKey] = useState<Record<string, boolean>>({});
+  /** A chave como esta no cofre — serve para saber se o campo tem alteracao. */
+  const [savedKeys, setSavedKeys] = useState<Record<string, string>>({});
+  /** Chave a mostra: o campo nasce mascarado, como qualquer campo de senha. */
+  const [revealedKey, setRevealedKey] = useState<Record<string, boolean>>({});
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
   const [validations, setValidations] = useState<Record<string, ValidationResult>>({});
   const [validatingId, setValidatingId] = useState<string | null>(null);
@@ -53,17 +56,21 @@ export function Options() {
     const loaded = await getSettings();
     setSettings(loaded);
     setPatSaved(await hasSecret(SecretNames.githubPat));
-    const keys: Record<string, boolean> = {};
     const oauth: Record<string, string> = {};
+    // A chave salva volta para o campo. Antes so um placeholder dizia que
+    // existia uma, e nao dava para conferir se a que estava la era a certa —
+    // conferir uma credencial e' justamente o que se faz nesta tela.
+    const salvas: Record<string, string> = {};
     for (const provider of loaded.providers) {
       if (provider.kind === 'oauth') {
         const tokens = await getStoredTokens(provider.id);
         oauth[provider.id] = tokens ? 'conectado' : 'desconectado';
       } else {
-        keys[provider.id] = Boolean(await getSecret(SecretNames.providerApiKey(provider.id)));
+        salvas[provider.id] = (await getSecret(SecretNames.providerApiKey(provider.id))) ?? '';
       }
     }
-    setHasProviderKey(keys);
+    setKeyDrafts(salvas);
+    setSavedKeys(salvas);
     setOauthStatus(oauth);
   }, []);
 
@@ -155,7 +162,6 @@ export function Options() {
         }
       }
       await setSecret(SecretNames.providerApiKey(provider.id), key.trim());
-      setKeyDrafts((prev) => ({ ...prev, [provider.id]: '' }));
       setValidatingId(provider.id);
       // Valida na hora: descobrir que a chave esta errada so na primeira
       // mensagem do chat e o pior momento possivel.
@@ -429,19 +435,32 @@ export function Options() {
                     </span>
                   )}
                 </div>
+                {/* Salvar so liga quando o campo difere do que esta no cofre. */}
                 <div className="flex gap-2">
                   <input
-                    type="password"
+                    type={revealedKey[provider.id] ? 'text' : 'password'}
                     className={inputClass}
                     value={keyDrafts[provider.id] ?? ''}
-                    placeholder={hasProviderKey[provider.id] ? 'chave salva — digite para substituir' : 'sk-...'}
+                    placeholder="sk-..."
                     onChange={(event) =>
                       setKeyDrafts((prev) => ({ ...prev, [provider.id]: event.target.value }))
                     }
                   />
                   <button
+                    className="rounded-md border border-ink-700 px-3 py-1.5 text-xs text-ink-200"
+                    title={revealedKey[provider.id] ? 'Ocultar a chave' : 'Mostrar a chave'}
+                    onClick={() =>
+                      setRevealedKey((prev) => ({ ...prev, [provider.id]: !prev[provider.id] }))
+                    }
+                  >
+                    {revealedKey[provider.id] ? 'Ocultar' : 'Mostrar'}
+                  </button>
+                  <button
                     className="rounded-md bg-gradient-to-r from-lov-orange to-lov-pink px-3 py-1.5 text-xs font-medium text-lov-ink disabled:opacity-40"
-                    disabled={!(keyDrafts[provider.id] ?? '').trim()}
+                    disabled={
+                      !(keyDrafts[provider.id] ?? '').trim() ||
+                      (keyDrafts[provider.id] ?? '') === (savedKeys[provider.id] ?? '')
+                    }
                     onClick={() => void saveProviderKey(provider, keyDrafts[provider.id] ?? '')}
                   >
                     Salvar

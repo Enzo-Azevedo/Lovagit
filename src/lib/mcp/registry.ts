@@ -4,6 +4,7 @@ import type { RepoId } from '../types';
 import { authorizeServer, forgetServerAuth } from './auth';
 import { McpClient } from './client';
 import { hasHostPermission } from './permissions';
+import { clearServerToken, getServerToken, setServerToken } from './token';
 import { namespacedToolName } from './protocol';
 import { McpError, type McpCallResult, type McpServerConfig, type McpToolInfo } from './types';
 
@@ -47,9 +48,27 @@ export async function upsertMcpServer(config: McpServerConfig): Promise<McpServe
   return writeServers(next);
 }
 
+/**
+ * Guarda (ou apaga) o token colado a mao e marca a configuracao.
+ *
+ * O token vai para o cofre cifrado; na configuracao fica so o `hasToken`, para
+ * a interface saber que existe um sem precisar decifrar nada para desenhar.
+ */
+export async function setMcpServerToken(
+  serverId: string,
+  token: string,
+): Promise<McpServerConfig[]> {
+  const hasToken = await setServerToken(serverId, token);
+  const servers = await getMcpServers();
+  return writeServers(
+    servers.map((server) => (server.id === serverId ? { ...server, hasToken } : server)),
+  );
+}
+
 export async function removeMcpServer(serverId: string): Promise<McpServerConfig[]> {
   clients.delete(serverId);
   await forgetServerAuth(serverId);
+  await clearServerToken(serverId);
   return writeServers((await getMcpServers()).filter((server) => server.id !== serverId));
 }
 
@@ -166,6 +185,16 @@ export async function connectMcpServer(serverId: string): Promise<ConnectResult>
     tools = await client.connect();
   } catch (error) {
     if (error instanceof McpError && error.kind === 'unauthorized') {
+      // Com token colado a mao, 401 significa que ELE foi recusado. Abrir a
+      // janela do OAuth aqui trocaria a credencial que o usuario escolheu por
+      // outra, sem avisar, e escondendo qual das duas o servidor rejeitou.
+      if (await getServerToken(serverId)) {
+        const message =
+          'O servidor recusou o token informado. Confira se ele e valido e se tem os ' +
+          'acessos necessarios.';
+        await upsertMcpServer({ ...config, lastError: message });
+        throw new McpError(message, serverId, 'unauthorized');
+      }
       const hint = (error as McpError & { wwwAuthenticate?: string | null }).wwwAuthenticate ?? null;
       const authorized = await authorizeServer(serverId, config.url, hint, clientId);
       clientId = authorized.clientId;

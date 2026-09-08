@@ -1,4 +1,5 @@
 import { getAccessToken } from './auth';
+import { getServerToken } from './token';
 import {
   flattenToolContent,
   normalizeToolSchema,
@@ -31,7 +32,10 @@ export class McpClient {
       'MCP-Protocol-Version': this.protocolVersion,
     };
     if (this.sessionId) headers['Mcp-Session-Id'] = this.sessionId;
-    const token = await getAccessToken(this.config.id);
+    // Token colado a mao vence o do OAuth: se o usuario informou um, e' porque
+    // e' com ele que quer entrar — cair no OAuth por baixo do pano faria a
+    // extensao usar uma credencial que ele nao escolheu.
+    const token = (await getServerToken(this.config.id)) ?? (await getAccessToken(this.config.id));
     if (token) headers.Authorization = `Bearer ${token}`;
     return headers;
   }

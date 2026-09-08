@@ -4,11 +4,13 @@ import {
   createServerConfig,
   getMcpServers,
   removeMcpServer,
+  setMcpServerToken,
   setServerRepoEnabled,
   setToolEnabled,
   upsertMcpServer,
 } from '../lib/mcp/registry';
 import { originPatternFor, requestHostPermission } from '../lib/mcp/permissions';
+import { getServerToken } from '../lib/mcp/token';
 import { McpError, type McpServerConfig } from '../lib/mcp/types';
 import { getSettings } from '../lib/storage';
 import type { RepoId } from '../lib/types';
@@ -31,11 +33,33 @@ export function McpSection() {
   const [pendingOrigin, setPendingOrigin] = useState<{ serverId: string; origin: string } | null>(
     null,
   );
+  /** Token de cada servidor, do cofre. Volta para o campo pelo mesmo motivo da
+   *  chave de API: nao da para conferir uma credencial que nao aparece. */
+  const [tokenDrafts, setTokenDrafts] = useState<Record<string, string>>({});
+  const [revealedToken, setRevealedToken] = useState<Record<string, boolean>>({});
 
   const reload = useCallback(async () => {
-    setServers(await getMcpServers());
+    const lista = await getMcpServers();
+    setServers(lista);
     setRepoIds((await getSettings()).connectedRepoIds);
+    const tokens = await Promise.all(
+      lista.map(async (server) => [server.id, (await getServerToken(server.id)) ?? ''] as const),
+    );
+    setTokenDrafts(Object.fromEntries(tokens));
   }, []);
+
+  const saveToken = useCallback(
+    async (serverId: string) => {
+      await setMcpServerToken(serverId, tokenDrafts[serverId] ?? '');
+      setMessage(
+        (tokenDrafts[serverId] ?? '').trim()
+          ? 'Token guardado no cofre. Clique em "Reconectar" para usa-lo.'
+          : 'Token removido. O servidor volta a usar o login OAuth.',
+      );
+      await reload();
+    },
+    [reload, tokenDrafts],
+  );
 
   useEffect(() => {
     void reload();
@@ -197,7 +221,12 @@ export function McpSection() {
             <div className="min-w-0">
               <p className="truncate text-xs text-ink-200">
                 {server.label}
-                {server.requiresAuth && (
+                {server.hasToken && (
+                  <span className="ml-2 rounded bg-ink-800 px-1 text-[10px] text-ink-400">
+                    token
+                  </span>
+                )}
+                {server.requiresAuth && !server.hasToken && (
                   <span className="ml-2 rounded bg-ink-800 px-1 text-[10px] text-ink-400">
                     autenticado
                   </span>
@@ -227,6 +256,39 @@ export function McpSection() {
                 Remover
               </button>
             </div>
+          </div>
+
+          <div>
+            <p className="mb-1 text-[11px] text-ink-200">
+              Token de acesso <span className="text-ink-400">(opcional)</span>
+            </p>
+            <div className="flex gap-2">
+              <input
+                type={revealedToken[server.id] ? 'text' : 'password'}
+                className={inputClass}
+                value={tokenDrafts[server.id] ?? ''}
+                placeholder="sbp_... — deixe vazio para entrar por OAuth"
+                onChange={(event) =>
+                  setTokenDrafts((prev) => ({ ...prev, [server.id]: event.target.value }))
+                }
+              />
+              <button
+                className={ghostButton}
+                onClick={() =>
+                  setRevealedToken((prev) => ({ ...prev, [server.id]: !prev[server.id] }))
+                }
+              >
+                {revealedToken[server.id] ? 'Ocultar' : 'Mostrar'}
+              </button>
+              <button className={primaryButton} onClick={() => void saveToken(server.id)}>
+                Salvar
+              </button>
+            </div>
+            <p className="mt-1 text-[10px] text-ink-400">
+              Para servidor que nao faz login por OAuth, ou quando voce prefere um token proprio —
+              no Supabase e' o <em>personal access token</em> (<code>sbp_...</code>). Havendo token,
+              ele e' usado no lugar do OAuth. Fica no cofre cifrado, nunca na configuracao em claro.
+            </p>
           </div>
 
           <div>

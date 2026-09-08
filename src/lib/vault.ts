@@ -18,6 +18,8 @@ export const SecretNames = {
   providerApiKey: (providerId: string) => `provider:${providerId}:api_key`,
   providerOAuth: (providerId: string) => `provider:${providerId}:oauth`,
   mcpOAuth: (serverId: string) => `mcp:${serverId}:oauth`,
+  /** Token de acesso colado pelo usuario (ex.: `sbp_...` do Supabase). */
+  mcpToken: (serverId: string) => `mcp:${serverId}:token`,
 } as const;
 
 function openDb(): Promise<IDBDatabase> {

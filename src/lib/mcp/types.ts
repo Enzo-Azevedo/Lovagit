@@ -22,6 +22,9 @@ export interface McpServerConfig {
   clientId?: string;
   /** Marca que o servidor exigiu OAuth. */
   requiresAuth?: boolean;
+  /** Ha token colado a mao no cofre para este servidor. O token em si nunca
+   *  aparece aqui: esta configuracao vive em `chrome.storage.local`, em claro. */
+  hasToken?: boolean;
 }
 
 export interface McpToolInfo {
