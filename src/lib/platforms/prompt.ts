@@ -38,11 +38,18 @@ function descreverAcesso(
   );
 
   if (!servidor) {
+    const label = platformById(platformId)?.label ?? platformId;
     return [
-      '  - Sem ferramenta para acessar este servico nesta conversa. Voce sabe que ele',
-      '    existe e qual e o projeto, mas nao consegue ler nem escrever nada nele. Se a',
-      '    tarefa depender disso, diga ao usuario que falta habilitar o servidor MCP do',
-      `    ${platformById(platformId)?.label ?? platformId} para este repositorio — nao tente por outro caminho.`,
+      '  - **Sem ferramenta para acessar este servico nesta conversa.** Voce sabe que ele',
+      '    existe e qual e o projeto, mas nao consegue ler nem escrever NADA nele.',
+      `  - Se a tarefa depender disso, diga ao usuario, com estas palavras: falta cadastrar`,
+      `    e habilitar o servidor MCP do ${label} para este repositorio, em Configuracoes >`,
+      '    Conexoes. Diga isso ANTES de tentar qualquer outra coisa.',
+      '  - **Nao substitua por `search_code`.** Procurar nome de tabela ou de coluna no',
+      '    codigo responde outra pergunta: acha (ou nao acha) o nome escrito em algum',
+      '    arquivo, e nao diz nada sobre o que existe no banco. Pior: voltar "nenhum',
+      '    resultado" dessa busca se parece com "o banco esta vazio", e o usuario le como',
+      '    integracao quebrada. Sem a ferramenta, a resposta honesta e dizer que nao tem acesso.',
     ];
   }
 
@@ -110,7 +117,7 @@ export function renderPlatformSection(
 # Servicos ligados a ${scope.repoId}
 ${blocos.join('\n')}
 
-Tres regras sobre isto:
+Quatro regras sobre isto:
 - **Use o ref acima direto.** Ele ja foi escolhido pelo usuario para este
   repositorio. Nao liste projetos para descobrir qual e', nao tente adivinhar
   pelo nome e nao pergunte qual usar — listar e ir tentando gasta um turno pago
@@ -118,6 +125,12 @@ Tres regras sobre isto:
 - **Os outros projetos da conta nao sao deste repositorio.** O token alcanca a
   conta inteira; o recorte e' este. Se a tarefa parecer exigir outro projeto,
   diga isso ao usuario em vez de procurar por conta propria.
+- **Pergunta sobre DADOS nao se responde lendo codigo.** "Quantas vagas existem",
+  "quais candidatos desistiram", "essa tabela tem registro" sao perguntas de banco.
+  So as ferramentas listadas acima respondem isso. \`search_code\` e \`read_file\`
+  procuram no CODIGO do repositorio: eles mostram onde a tabela e' declarada ou
+  consultada, nunca o que ela contem. Usar um no lugar do outro produz uma
+  resposta que parece certa e esta errada.
 - **O que voce pode fazer e o que as ferramentas acima permitem — nada alem.**
   As permissoes efetivas sao as do token do usuario, e a extensao nao tem como
   ler quais sao. Uma recusa do servico e resposta, nao obstaculo: relate ao
