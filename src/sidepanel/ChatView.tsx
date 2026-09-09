@@ -4,6 +4,8 @@ import { runAgent, type AgentEvent } from '../lib/agent/loop';
 import { createScope } from '../lib/agent/isolation';
 import { applyChangesToMap } from '../lib/github/mapper';
 import { platformLinksForRepo } from '../lib/platforms/store';
+import { linksWithoutTool } from '../lib/platforms/access';
+import { platformById, type RepoPlatformLink } from '../lib/platforms/types';
 import { getServersForRepo } from '../lib/mcp/registry';
 import { captureError } from '../lib/telemetry/reporter';
 import { RETRY_DELAY_SECONDS, shouldAutoRetry } from '../lib/agent/retry';
@@ -65,6 +67,15 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   const [memory, setMemory] = useState<MemoryEntry[]>([]);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  /**
+   * Plataformas vinculadas a este repositorio que nao tem ferramenta nenhuma.
+   *
+   * Fica em estado, e nao so dentro do turno, porque o aviso precisa estar na
+   * tela ANTES da pergunta. Depois da resposta ja e' tarde: a pergunta sobre o
+   * banco ja foi feita e ja voltou um "nenhum resultado" que veio de busca no
+   * codigo.
+   */
+  const [semFerramenta, setSemFerramenta] = useState<RepoPlatformLink[]>([]);
   const [pendingMessage, setPendingMessage] = useState('');
   const [streaming, setStreaming] = useState('');
   /** Raciocinio do turno em andamento — some assim que a resposta chega. */
@@ -166,6 +177,33 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
       setMemoryError(caught instanceof Error ? caught.message : String(caught));
     }
   }, [repo.id]);
+
+  /**
+   * Recalcula o aviso de plataforma sem ferramenta.
+   *
+   * Separado do efeito de montagem porque tambem roda quando o cadastro muda em
+   * outra aba — que e' o caso normal: o usuario vai as opcoes, cadastra o
+   * servidor MCP e volta. Sem isto o selo continuaria aceso ate recarregar.
+   */
+  const revisarFerramentas = useCallback(async () => {
+    const [vinculos, servidores] = await Promise.all([
+      platformLinksForRepo(repo.id),
+      getServersForRepo(repo.id),
+    ]);
+    setSemFerramenta(linksWithoutTool(vinculos, servidores));
+  }, [repo.id]);
+
+  useEffect(() => {
+    void revisarFerramentas();
+    // Mesmo caminho que o resto da extensao usa para reagir a mudanca vinda de
+    // outra aba (ver `useRepos` e a barra de versao).
+    const aoMudar = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area !== 'local') return;
+      if ('mcp:servers' in changes || 'platforms:links' in changes) void revisarFerramentas();
+    };
+    chrome.storage.onChanged.addListener(aoMudar);
+    return () => chrome.storage.onChanged.removeListener(aoMudar);
+  }, [revisarFerramentas]);
 
   // Troca de repositorio = troca completa de estado. Nada e' reaproveitado.
   useEffect(() => {
@@ -551,6 +589,29 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           </div>
         </details>
       )}
+
+      {/* Plataforma vinculada sem ferramenta para alcanca-la.
+          Fica aqui, colado no topo e fora do scroll, pelo mesmo motivo da
+          memoria: precisa estar visivel na hora de perguntar. Dentro do scroll
+          ele subiria com as mensagens e sumiria justamente na conversa longa,
+          que e' quando o engano acontece. */}
+      {semFerramenta.map((vinculo) => (
+        <button
+          key={vinculo.platformId}
+          className="glass shrink-0 border-b border-lov-orange/30 bg-lov-orange/10 px-3 py-1.5 text-left text-[11px] text-ink-200 hover:bg-lov-orange/15"
+          title="Abre as configuracoes na secao Conexoes"
+          onClick={() =>
+            void chrome.tabs.create({
+              url: chrome.runtime.getURL('options/index.html#conexoes'),
+            })
+          }
+        >
+          <strong>{platformById(vinculo.platformId)?.label ?? vinculo.platformId} vinculado, sem ferramenta.</strong>{' '}
+          O projeto <code className="font-mono">{vinculo.project.name}</code> esta configurado, mas
+          nao ha servidor MCP habilitado para este repositorio — a IA nao consegue consultar o
+          banco e vai dizer isso em vez de tentar pelo codigo. Clique para cadastrar.
+        </button>
+      ))}
 
       {/* Memoria colada no topo, fora do scroll: e' um atalho de consulta, nao
           um trecho da conversa. Dentro do scroll ela subia junto com as

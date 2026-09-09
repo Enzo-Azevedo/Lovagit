@@ -4,7 +4,9 @@ import type { RepoId } from '../types';
 import { authorizeServer, forgetServerAuth } from './auth';
 import { McpClient } from './client';
 import { hasHostPermission } from './permissions';
+import { mcpUrlForPlatform } from '../platforms/access';
 import { platformTokenForMcpUrl } from '../platforms/store';
+import { platformById, type PlatformId } from '../platforms/types';
 import { clearServerToken, getServerToken, setServerToken } from './token';
 import { namespacedToolName } from './protocol';
 import { McpError, type McpCallResult, type McpServerConfig, type McpToolInfo } from './types';
@@ -83,6 +85,40 @@ export function createServerConfig(label: string, url: string): McpServerConfig 
     tools: [],
     disabledTools: [],
   };
+}
+
+/**
+ * Cadastra o servidor MCP de uma plataforma, ja com escopo, para UM repositorio.
+ *
+ * Reaproveita o mesmo caminho do cadastro manual (`createServerConfig` +
+ * `upsertMcpServer`) de proposito: um segundo fluxo de cadastro em paralelo
+ * divergiria do primeiro na primeira mudanca, e o cadastro e' onde mora a regra
+ * de isolamento.
+ *
+ * `enabledRepoIds` sai com o repositorio atual e mais nada. Habilitar para todos
+ * seria abrir exatamente o canal lateral entre repositorios que esta extensao
+ * existe para impedir — e o servidor recem-cadastrado esta preso a um projeto de
+ * banco, o que torna o vazamento pior do que contexto: seria dado de producao.
+ *
+ * A credencial nao e' pedida aqui: o token da plataforma ja esta no cofre e
+ * `platformTokenForMcpUrl` o resolve pelo host na hora da conexao.
+ */
+export async function registerPlatformServer(
+  platformId: PlatformId,
+  repoId: RepoId,
+  projectRef: string,
+): Promise<McpServerConfig> {
+  assertRepoId(repoId);
+  const url = mcpUrlForPlatform(platformId, projectRef);
+  if (!url) throw new McpError(`Plataforma desconhecida: ${platformId}`, platformId, 'protocol');
+
+  const plataforma = platformById(platformId);
+  const config: McpServerConfig = {
+    ...createServerConfig(plataforma?.label ?? platformId, url),
+    enabledRepoIds: [repoId],
+  };
+  await upsertMcpServer(config);
+  return config;
 }
 
 export async function setServerRepoEnabled(
