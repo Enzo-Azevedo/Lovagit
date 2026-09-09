@@ -1,13 +1,16 @@
 import type { RepoScope } from '../agent/isolation';
 import { namespacedToolName } from '../mcp/protocol';
 import type { McpServerConfig } from '../mcp/types';
+import { serverForPlatform } from './access';
 import {
   parseMcpScope,
   platformById,
-  platformForMcpUrl,
   type PlatformId,
   type PlatformProject,
+  type RepoPlatformLink,
 } from './types';
+
+export type { RepoPlatformLink };
 
 /**
  * A parte das plataformas no system prompt.
@@ -22,20 +25,13 @@ import {
  * que a extensao ja sabia de antemao.
  */
 
-export interface RepoPlatformLink {
-  platformId: PlatformId;
-  project: PlatformProject;
-}
-
 /** O caminho ate a plataforma, se e' que existe algum nesta conversa. */
 function descreverAcesso(
   platformId: PlatformId,
   project: PlatformProject,
   mcpServers: McpServerConfig[],
 ): string[] {
-  const servidor = mcpServers.find(
-    (server) => platformForMcpUrl(server.url)?.id === platformId,
-  );
+  const servidor = serverForPlatform(platformId, mcpServers);
 
   if (!servidor) {
     const label = platformById(platformId)?.label ?? platformId;

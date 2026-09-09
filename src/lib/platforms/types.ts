@@ -129,3 +129,15 @@ export function parseMcpScope(url: string): McpScope {
     return { readOnly: false, projectRef: null };
   }
 }
+
+/**
+ * Um repositorio e o projeto de plataforma que ele usa, ja resolvido.
+ *
+ * Mora aqui, e nao no modulo do prompt, porque nao e' assunto de prompt: o
+ * vinculo e' o dado, e o prompt e' so um dos leitores dele. A tela lateral e o
+ * cadastro do servidor MCP leem o mesmo.
+ */
+export interface RepoPlatformLink {
+  platformId: PlatformId;
+  project: PlatformProject;
+}

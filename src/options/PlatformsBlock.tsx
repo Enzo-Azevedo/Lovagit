@@ -11,12 +11,8 @@ import {
 } from '../lib/platforms/store';
 import { getSettings } from '../lib/storage';
 import type { RepoId } from '../lib/types';
-import {
-  PLATFORMS,
-  platformForMcpUrl,
-  type PlatformConnection,
-  type PlatformId,
-} from '../lib/platforms/types';
+import { serverForPlatformInRepo } from '../lib/platforms/access';
+import { PLATFORMS, type PlatformConnection, type PlatformId } from '../lib/platforms/types';
 import { getMcpServers } from '../lib/mcp/registry';
 import type { McpServerConfig } from '../lib/mcp/types';
 
@@ -222,11 +218,7 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
                             ))}
                           </select>
                           {escolhido &&
-                            !mcpServers.some(
-                              (server) =>
-                                server.enabledRepoIds.includes(repoId) &&
-                                platformForMcpUrl(server.url)?.id === plataforma.id,
-                            ) && (
+                            !serverForPlatformInRepo(plataforma.id, repoId, mcpServers) && (
                               <p className="text-[10px] text-lov-orange">
                                 Vinculado, mas sem servidor MCP do {plataforma.label} habilitado
                                 para este repositorio — a IA sabe do projeto e nao tem como
