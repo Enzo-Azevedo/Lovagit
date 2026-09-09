@@ -1,6 +1,11 @@
 import type { McpServerConfig } from '../mcp/types';
 import type { RepoId } from '../types';
-import { platformForMcpUrl, type PlatformId, type RepoPlatformLink } from './types';
+import {
+  platformById,
+  platformForMcpUrl,
+  type PlatformId,
+  type RepoPlatformLink,
+} from './types';
 
 /**
  * Como um repositorio alcanca uma plataforma — ou por que nao alcanca.
@@ -55,4 +60,35 @@ export function linksWithoutTool(
   serversDoRepo: McpServerConfig[],
 ): RepoPlatformLink[] {
   return links.filter((link) => !serverForPlatform(link.platformId, serversDoRepo));
+}
+
+/**
+ * A URL do servidor MCP ja com o escopo deste repositorio.
+ *
+ * Dois recortes entram aqui, e eles NAO se substituem:
+ *
+ * - `project_ref` prende o servidor a um projeto so. E' o unico recorte que o
+ *   servidor impoe — o que se escreve no prompt e' pedido, isto e' recusa. De
+ *   quebra, com ele as ferramentas de conta (listar projetos, listar
+ *   organizacoes) desaparecem, o que combina com a regra que o prompt ja da de
+ *   nunca sair listando projeto para descobrir qual usar.
+ * - `read_only=true` faz o servidor executar como usuario Postgres somente
+ *   leitura. Comeca ligado porque o estrago de uma escrita acidental em banco de
+ *   producao nao tem desfazer, e afrouxar depois e' um clique.
+ *
+ * O que isto NAO recorta: o token. Ele continua sendo da conta inteira, e por
+ * isso o aviso de alcance do token permanece na tela.
+ */
+export function mcpUrlForPlatform(
+  platformId: PlatformId,
+  projectRef: string,
+  options: { readOnly?: boolean } = {},
+): string | null {
+  const plataforma = platformById(platformId);
+  if (!plataforma) return null;
+
+  const url = new URL(plataforma.mcpUrl);
+  url.searchParams.set('project_ref', projectRef);
+  if (options.readOnly !== false) url.searchParams.set('read_only', 'true');
+  return url.toString();
 }

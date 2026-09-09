@@ -11,9 +11,9 @@ import {
 } from '../lib/platforms/store';
 import { getSettings } from '../lib/storage';
 import type { RepoId } from '../lib/types';
-import { serverForPlatformInRepo } from '../lib/platforms/access';
+import { mcpUrlForPlatform, serverForPlatformInRepo } from '../lib/platforms/access';
 import { PLATFORMS, type PlatformConnection, type PlatformId } from '../lib/platforms/types';
-import { getMcpServers } from '../lib/mcp/registry';
+import { connectMcpServer, getMcpServers, registerPlatformServer } from '../lib/mcp/registry';
 import type { McpServerConfig } from '../lib/mcp/types';
 
 const inputClass =
@@ -63,6 +63,43 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  /**
+   * Cadastra o servidor MCP da plataforma para ESTE repositorio e ja conecta.
+   *
+   * A permissao de host e' o primeiro `await` do clique: o Chrome so aceita
+   * `permissions.request` dentro do gesto do usuario, e qualquer espera antes
+   * dele encerra o gesto. A URL sai pronta antes disso justamente por isso —
+   * ela e' calculada de dados que ja estao na tela.
+   */
+  const cadastrarServidor = useCallback(
+    async (id: PlatformId, repoId: RepoId, projectRef: string) => {
+      const url = mcpUrlForPlatform(id, projectRef);
+      if (!url) return;
+
+      if (!(await requestHostPermission(url))) {
+        onMessage(`Sem permissao para ${new URL(url).origin} — o servidor nao teria como conectar.`);
+        return;
+      }
+
+      setOcupado(id);
+      onMessage(null);
+      try {
+        const config = await registerPlatformServer(id, repoId, projectRef);
+        const { tools } = await connectMcpServer(config.id);
+        onMessage(
+          `Servidor cadastrado para ${repoId} e conectado — ${tools.length} ferramenta(s), ` +
+            'somente leitura, preso a este projeto.',
+        );
+      } catch (erro) {
+        onMessage(erro instanceof Error ? erro.message : String(erro));
+      } finally {
+        setOcupado(null);
+        await reload();
+      }
+    },
+    [onMessage, reload],
+  );
 
   const salvar = useCallback(
     async (id: PlatformId) => {
@@ -219,11 +256,30 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
                           </select>
                           {escolhido &&
                             !serverForPlatformInRepo(plataforma.id, repoId, mcpServers) && (
-                              <p className="text-[10px] text-lov-orange">
-                                Vinculado, mas sem servidor MCP do {plataforma.label} habilitado
-                                para este repositorio — a IA sabe do projeto e nao tem como
-                                acessa-lo.
-                              </p>
+                              <div className="space-y-1 rounded-md border border-lov-orange/30 bg-lov-orange/10 p-2">
+                                <p className="text-[10px] text-lov-orange">
+                                  Vinculado, mas sem servidor MCP do {plataforma.label} habilitado
+                                  para este repositorio — a IA sabe do projeto e nao tem como
+                                  acessa-lo.
+                                </p>
+                                <button
+                                  className={primaryButton}
+                                  disabled={ocupado === plataforma.id}
+                                  onClick={() =>
+                                    void cadastrarServidor(plataforma.id, repoId, escolhido)
+                                  }
+                                >
+                                  {ocupado === plataforma.id
+                                    ? 'Cadastrando...'
+                                    : 'Cadastrar servidor MCP para este repositorio'}
+                                </button>
+                                <p className="text-[10px] text-ink-400">
+                                  Cria o servidor preso a este projeto (<code>project_ref</code>) e
+                                  em somente leitura (<code>read_only</code>), habilitado so para{' '}
+                                  <code className="font-mono">{repoId}</code>. Usa o token que voce
+                                  ja salvou acima — sem login novo.
+                                </p>
+                              </div>
                             )}
                           </div>
                         </div>

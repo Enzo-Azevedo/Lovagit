@@ -28,6 +28,14 @@ export interface PlatformDefinition {
    * "Conexoes" evita ter que repetir a mesma coisa no servidor MCP do servico.
    */
   mcpHosts: string[];
+  /**
+   * Endpoint do servidor MCP oficial do servico, para o cadastro automatico.
+   *
+   * Escrito por extenso em vez de montado a partir de `mcpHosts`: o caminho nao
+   * se deduz do host, e chutar `/mcp` funcionaria hoje e quebraria calado no dia
+   * em que o servico mudasse.
+   */
+  mcpUrl: string;
   /** O que o token dá acesso — texto de tela, nao decoracao: token de
    *  plataforma costuma ser mais poderoso do que parece. */
   scopeWarning: string;
@@ -42,6 +50,7 @@ export const PLATFORMS: PlatformDefinition[] = [
     createUrl: 'https://supabase.com/dashboard/account/tokens',
     apiOrigin: 'https://api.supabase.com',
     mcpHosts: ['mcp.supabase.com'],
+    mcpUrl: 'https://mcp.supabase.com/mcp',
     scopeWarning:
       'Um token sem escopo tem os mesmos privilegios da conta que o criou — todos os projetos, ' +
       'nao so um. Prefira um token com escopo quando o Supabase oferecer.',
