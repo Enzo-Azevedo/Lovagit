@@ -162,7 +162,7 @@ export function ConnectionsSection() {
   }, [connect, label, reload, url]);
 
   return (
-    <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
+    <section id="conexoes" className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
       <h2 className="text-sm text-ink-200">6. Conexoes</h2>
       <p className="text-[11px] text-ink-400">
         Credenciais e ferramentas que o agente pode usar alem do GitHub. Sao de dois tipos:
