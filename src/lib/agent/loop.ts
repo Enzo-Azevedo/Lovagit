@@ -14,6 +14,7 @@ import {
   leakCheckPayload,
   type RepoScope,
 } from './isolation';
+import { explainStepCeiling, explainStopReason } from './ending';
 import { buildSystemPrompt } from './prompt';
 import type { McpServerConfig } from '../mcp/types';
 import type { MemoryEntry } from '../memory/types';
@@ -228,6 +229,9 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     },
   };
 
+  /** O laco terminou por ter acabado as voltas, e nao porque o modelo parou. */
+  let esgotouPassos = false;
+
   for (let step = 0; step < MAX_STEPS; step++) {
     if (options.signal?.aborted) throw new DOMException('Cancelado', 'AbortError');
 
@@ -289,6 +293,14 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       break;
     }
 
+    // Corte do provedor (teto de tokens, filtro de conteudo) nao e' fim normal.
+    // Passava como se fosse, e o usuario lia meia resposta como resposta pronta.
+    const corte = explainStopReason(response.stopReason);
+    if (corte) {
+      onEvent({ type: 'error', error: corte });
+      break;
+    }
+
     if (silentTurn) {
       onEvent({
         type: 'error',
@@ -323,6 +335,17 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
 
     // Alteracoes aguardando aprovacao encerram o turno: quem decide e' o usuario.
     if (awaitingApproval) break;
+
+    // Chegou ao fim do corpo na ultima volta: o modelo ainda queria continuar e
+    // quem encerrou foi o teto. Marcado aqui, e nao depois do laco, porque so
+    // neste ponto da para distinguir "acabaram as voltas" de "o modelo parou".
+    if (step === MAX_STEPS - 1) esgotouPassos = true;
+  }
+
+  // Sem isto, estourar o teto era o unico encerramento sem aviso nenhum: a
+  // conversa parava e ficava igualzinha a um turno que terminou bem.
+  if (esgotouPassos) {
+    onEvent({ type: 'error', error: explainStepCeiling(MAX_STEPS) });
   }
 
   // O modelo mexeu em arquivos e encerrou sem chamar commit_changes. Sem
