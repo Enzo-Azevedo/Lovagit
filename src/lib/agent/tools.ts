@@ -175,6 +175,30 @@ export interface ToolRuntime {
   onRemember: (summary: string, detail?: string) => void;
 }
 
+/**
+ * A chamada chegou com os argumentos cortados?
+ *
+ * Quando o JSON dos argumentos nao fecha — stream que caiu no meio, modelo que
+ * estourou o teto de tokens montando a chamada —, o parser guarda o texto cru
+ * em `__parseError` em vez de quebrar. Ate agora ninguem olhava essa marca: a
+ * chamada seguia com os campos ausentes virando string vazia, e um `read_file`
+ * com `path: ''` respondia "nao encontrado". O modelo lia isso como "o arquivo
+ * nao existe" e mudava de rumo por causa de um defeito de transporte.
+ *
+ * Dizer a verdade aqui vale mais do que tentar adivinhar o argumento: com o
+ * aviso, o modelo refaz a chamada; com o palpite, ele age sobre dado inventado.
+ */
+export function describeTruncatedInput(input: Record<string, unknown>): string | null {
+  const cru = input.__parseError;
+  if (typeof cru !== 'string') return null;
+
+  return (
+    'Os argumentos desta chamada chegaram cortados e nao formam um JSON valido — ' +
+    'a resposta foi interrompida no meio da chamada. Nada foi executado. Refaca a ' +
+    `chamada com os argumentos completos. Trecho recebido: ${cru.slice(0, 200)}`
+  );
+}
+
 function ok(call: ToolCall, content: string): ToolResult {
   return { toolCallId: call.id, name: call.name, content };
 }
@@ -258,6 +282,11 @@ async function executeMcpTool(runtime: ToolRuntime, call: ToolCall): Promise<Too
 
 export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise<ToolResult> {
   try {
+    // Antes de qualquer coisa, inclusive de MCP: argumento cortado nao pode
+    // virar acao, e vale para toda ferramenta.
+    const cortados = describeTruncatedInput(call.input);
+    if (cortados) return fail(call, cortados);
+
     if (call.name.startsWith('mcp__')) return await executeMcpTool(runtime, call);
 
     switch (call.name) {
