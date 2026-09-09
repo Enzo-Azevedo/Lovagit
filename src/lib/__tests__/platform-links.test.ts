@@ -82,7 +82,9 @@ describe('o que o modelo fica sabendo que pode fazer', () => {
     const texto = renderPlatformSection(escopo, vinculo, []);
 
     expect(texto).toContain('Sem ferramenta para acessar');
-    expect(texto).toMatch(/nao tente por outro caminho/i);
+    // O "nao tente por outro caminho" generico virou proibicao nomeada: o
+    // desvio real tinha nome (`search_code`), e instrucao abstrata nao o cobria.
+    expect(texto).toMatch(/Nao substitua por `search_code`/i);
   });
 
   it('lista as ferramentas que existem de fato, ja com o prefixo do servidor', () => {
@@ -168,5 +170,35 @@ describe('escopo declarado na URL do servidor', () => {
 
   it('URL invalida nao quebra o prompt', () => {
     expect(parseMcpScope('nao e url')).toEqual({ readOnly: false, projectRef: null });
+  });
+});
+
+describe('vinculo sem ferramenta nao pode virar busca em codigo', () => {
+  it('proibe explicitamente o desvio por search_code', () => {
+    // Foi o que aconteceu de verdade: sem servidor MCP, o modelo foi procurar
+    // nomes de tabela no codigo com search_code e devolveu "nenhum resultado",
+    // que o usuario leu como "o banco esta vazio".
+    const texto = renderPlatformSection(escopo, vinculo, []).replace(/\s+/g, ' ');
+
+    expect(texto).toContain('Nao substitua por `search_code`');
+    expect(texto).toMatch(/nao diz nada sobre o que existe no banco/i);
+    expect(texto).toMatch(/se parece com "o banco esta vazio"/i);
+  });
+
+  it('manda dizer ao usuario onde resolver, antes de tentar outra coisa', () => {
+    const texto = renderPlatformSection(escopo, vinculo, []).replace(/\s+/g, ' ');
+    expect(texto).toContain('Configuracoes > Conexoes');
+    expect(texto).toMatch(/ANTES de tentar qualquer outra coisa/i);
+  });
+
+  it('mesmo COM ferramenta, pergunta de dados nao se responde lendo codigo', () => {
+    // A confusao nao depende de faltar servidor: search_code acha onde a tabela
+    // e' declarada, nunca o que ela contem.
+    const texto = renderPlatformSection(escopo, vinculo, [
+      servidor('https://mcp.supabase.com/mcp'),
+    ]).replace(/\s+/g, ' ');
+
+    expect(texto).toMatch(/Pergunta sobre DADOS nao se responde lendo codigo/i);
+    expect(texto).toMatch(/nunca o que ela contem/i);
   });
 });

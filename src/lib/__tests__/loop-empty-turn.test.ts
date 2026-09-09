@@ -159,3 +159,49 @@ describe('raciocinio por passo', () => {
     expect(JSON.stringify(turnos)).not.toContain('PENSAMENTO_QUE_NAO_PODE_VOLTAR');
   });
 });
+
+describe('encerramento por teto', () => {
+  /** Provedor que sempre pede outra leitura: nunca para por conta propria. */
+  function provedorInsaciavel(): AIProvider {
+    let n = 0;
+    return {
+      id: 'p1',
+      label: 'Provedor',
+      model: 'modelo-x',
+      complete: async () => ({
+        text: '',
+        toolCalls: [
+          { id: `c${++n}`, name: 'list_directory', input: { path: '' } },
+        ],
+        stopReason: 'tool_calls',
+        usage: { inputTokens: 0, outputTokens: 0 },
+      }),
+    };
+  }
+
+  it('estourar o teto de passos vira aviso, e nao silencio', async () => {
+    // Era o unico encerramento sem evento nenhum: a conversa parava e ficava
+    // igual a um turno que terminou bem.
+    const { events } = await run(provedorInsaciavel());
+
+    const erro = events.find((event) => event.type === 'error');
+    expect(erro, 'o teto de passos precisa avisar').toBeDefined();
+    expect(erro && 'error' in erro && erro.error).toMatch(/teto de \d+ passos/i);
+  });
+
+  it('resposta cortada pelo teto de tokens encerra avisando', async () => {
+    // `finish_reason: length` passava como fim normal, e meia resposta chegava
+    // ao usuario com cara de resposta pronta.
+    const { events } = await run(
+      providerReturning({ text: 'Comecei a analisar o compo', stopReason: 'length' }),
+    );
+
+    const erro = events.find((event) => event.type === 'error');
+    expect(erro && 'error' in erro && erro.error).toMatch(/cortada pelo teto de tokens/i);
+  });
+
+  it('turno normal continua sem aviso', async () => {
+    const { events } = await run(providerReturning({ text: 'pronto', stopReason: 'stop' }));
+    expect(events.find((event) => event.type === 'error')).toBeUndefined();
+  });
+});
