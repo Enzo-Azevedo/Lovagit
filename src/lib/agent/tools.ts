@@ -5,6 +5,7 @@ import { diffLines, diffStats } from '../diff';
 import { callMcpTool, mcpToolSchemas } from '../mcp/registry';
 import { parseNamespacedToolName } from '../mcp/protocol';
 import type { McpServerConfig } from '../mcp/types';
+import { describeEmptySearch, explainSearchError, validateSearchQuery } from './search';
 import { describeProblems, findChangeProblems, isGeneratedFile } from './validate';
 import type { PendingFileChange, RepoMap, ToolCall, ToolResult, TreeEntry } from '../types';
 import type { ToolSchema } from '../ai/types';
@@ -70,8 +71,14 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
   {
     name: 'search_code',
     description:
-      'Busca por texto no codigo do repositorio (busca do GitHub, restrita a este repositorio). ' +
-      'Util para descobrir onde algo esta definido ou usado.',
+      'Busca por texto NO CODIGO do repositorio, pelo indice do GitHub — nunca em banco de ' +
+      'dados nem em servico externo. Util para descobrir onde algo esta definido ou usado. ' +
+      'Sintaxe: termos livres, opcionalmente com qualificadores `path:`, `language:`, ' +
+      '`filename:` e `extension:`; e obrigatorio pelo menos um termo alem dos ' +
+      'qualificadores (`createUser path:src/api` funciona, `path:"/admin"` sozinho e ' +
+      'recusado), e caminho nao comeca com barra. O indice cobre so parte do repositorio e ' +
+      'demora a incluir codigo novo: resultado vazio nao prova que algo nao existe — ' +
+      'confirme com list_directory e read_file.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -308,19 +315,26 @@ export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise
 
       case 'search_code': {
         const query = String(call.input.query ?? '').trim();
-        if (!query) return fail(call, 'Informe um termo de busca.');
-        const hits = await searchCode(runtime.scope.owner, runtime.scope.name, query);
+        // Consulta malformada volta como orientacao, e nao como o erro cru da
+        // API: a recusa so ajuda se ensinar a escrever a proxima.
+        const problema = validateSearchQuery(query);
+        if (problema) return fail(call, problema);
+
+        let hits;
+        try {
+          hits = await searchCode(runtime.scope.owner, runtime.scope.name, query);
+        } catch (error) {
+          // Falha de busca e' diferente de busca vazia. Misturar as duas fazia o
+          // modelo concluir "nao existe" a partir de uma consulta que nem rodou.
+          return fail(call, explainSearchError(error));
+        }
+
         if (hits.length === 0) {
           const fromMap = runtime.map.entries
             .filter((e) => e.type === 'blob' && e.path.toLowerCase().includes(query.toLowerCase()))
             .slice(0, 20)
             .map((e) => e.path);
-          return ok(
-            call,
-            fromMap.length > 0
-              ? `Sem resultados no conteudo. Arquivos cujo caminho casa com o termo:\n${fromMap.join('\n')}`
-              : 'Nenhum resultado.',
-          );
+          return ok(call, describeEmptySearch(query, fromMap));
         }
         return ok(
           call,
