@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildFingerprint, normalizeMessage, topFrame } from '../telemetry/fingerprint';
-import { buildIssueBody, buildIssueTitle, labelsFor } from '../telemetry/format';
+import { buildIssueBody, buildIssueTitle, labelsFor, titleSummary } from '../telemetry/format';
 import { LABELS, type ErrorReport } from '../telemetry/types';
 
 function report(patch: Partial<ErrorReport> = {}): ErrorReport {
@@ -88,5 +88,45 @@ describe('buildIssueTitle', () => {
   it('identifica origem, classe e modulo', () => {
     expect(buildIssueTitle(report())).toBe('[extensao] TypeError em agent/loop: x.map nao e funcao');
     expect(buildIssueTitle(report({ origin: 'integration' }))).toContain('[integracao]');
+  });
+
+  it('guarda o status HTTP no titulo', () => {
+    // Antes o titulo reusava a normalizacao do fingerprint, que troca numero
+    // por `<n>` — e o GitHub apaga marcacao em angulo do titulo. O #17 chegou
+    // ao tracker como "OpenRouter respondeu :", sem o 400.
+    const titulo = buildIssueTitle(
+      report({ message: 'OpenRouter respondeu 400: modelo recusado' }),
+    );
+    expect(titulo).toContain('respondeu 400:');
+    expect(titulo).not.toContain('<n>');
+  });
+});
+
+describe('titleSummary', () => {
+  it('troca placeholder em angulo por parenteses — o GitHub apaga o angulo', () => {
+    expect(titleSummary('falhou em <arquivo .tsx> com <sha>')).toBe(
+      'falhou em (arquivo .tsx) com (sha)',
+    );
+    expect(titleSummary('a <b> c')).not.toMatch(/[<>]/);
+  });
+
+  it('mantem numero, ao contrario da normalizacao do fingerprint', () => {
+    expect(titleSummary('respondeu 400 apos 2 tentativas')).toBe('respondeu 400 apos 2 tentativas');
+  });
+
+  it('achata quebra de linha e espaco repetido', () => {
+    expect(titleSummary('linha um\n   linha dois')).toBe('linha um linha dois');
+  });
+
+  it('avisa que cortou, em vez de partir a mensagem em silencio', () => {
+    const longa = `${'a'.repeat(200)}`;
+    const out = titleSummary(longa);
+    expect(out).toHaveLength(90);
+    expect(out.endsWith('…')).toBe(true);
+  });
+
+  it('nao mexe no que ja cabe', () => {
+    expect(titleSummary('curto')).toBe('curto');
+    expect(titleSummary('curto').endsWith('…')).toBe(false);
   });
 });

@@ -1,5 +1,4 @@
 import { fingerprintMarker } from './issues';
-import { normalizeMessage } from './fingerprint';
 import { LABELS, type ErrorReport } from './types';
 
 /** Erro da extensao entra como alta prioridade; integracao entra como normal. */
@@ -9,10 +8,33 @@ export function labelsFor(report: ErrorReport): string[] {
     : [LABELS.integrationError];
 }
 
+/**
+ * Resumo legivel para o titulo do issue.
+ *
+ * Duas armadilhas, as duas vistas no #17. A primeira: o GitHub engole marcacao
+ * em angulo no titulo, entao `respondeu <n>:` chega la como `respondeu :` — e a
+ * redacao e o fingerprint produzem exatamente esse tipo de placeholder
+ * (`<n>`, `<sha>`, `<arquivo .ts>`). Viram parenteses antes de sair. A segunda:
+ * cortar no caractere 90 seco parte a mensagem no meio de uma palavra sem aviso
+ * nenhum de que havia mais texto.
+ *
+ * O titulo nao normaliza numeros como o fingerprint faz: agrupar ocorrencias e'
+ * trabalho do marcador no corpo, e no titulo o status HTTP e' o que se le
+ * primeiro na lista de issues.
+ */
+export function titleSummary(message: string, limit = 90): string {
+  const flat = message
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/</g, '(')
+    .replace(/>/g, ')');
+  if (flat.length <= limit) return flat;
+  return `${flat.slice(0, limit - 1).trimEnd()}…`;
+}
+
 export function buildIssueTitle(report: ErrorReport): string {
-  const summary = normalizeMessage(report.message).slice(0, 90);
   const prefix = report.origin === 'extension' ? '[extensao]' : '[integracao]';
-  return `${prefix} ${report.name} em ${report.context.module ?? 'desconhecido'}: ${summary}`;
+  return `${prefix} ${report.name} em ${report.context.module ?? 'desconhecido'}: ${titleSummary(report.message)}`;
 }
 
 function table(rows: [string, string][]): string {
