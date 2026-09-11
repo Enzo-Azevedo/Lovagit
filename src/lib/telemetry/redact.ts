@@ -3,7 +3,8 @@ import type { RepoId } from '../types';
 /**
  * Redacao para publicacao. O repositorio de issues e' publico, entao nada que
  * identifique o trabalho do usuario pode sair daqui: nome de repositorio vira
- * hash, caminho de arquivo vira `<arquivo .ext>`, credencial vira placeholder.
+ * hash, caminho de arquivo vira `<arquivo .ext>`, credencial vira placeholder,
+ * identificador de conta devolvido por servico externo vira `<id-conta>`.
  * O que sobra e' o suficiente para diagnosticar: tipo, mensagem e stack.
  */
 
@@ -15,6 +16,14 @@ const SECRET_PATTERNS: [RegExp, string][] = [
   [/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/g, '<jwt>'],
   [/\b(Bearer|Basic|token)\s+[A-Za-z0-9._~+/=-]{12,}/gi, '$1 <credencial>'],
   [/[\w.+-]+@[\w-]+\.[\w.]{2,}/g, '<email>'],
+  // Identificador de conta que o provedor devolve junto do erro. Nao e'
+  // credencial — nao da acesso a nada —, mas aponta para uma pessoa, e o
+  // repositorio de issues e' publico. O OpenRouter manda `user_id` em todo
+  // corpo de erro; a primeira regra pega o campo com qualquer valor, as
+  // seguintes pegam o identificador solto no meio de uma frase.
+  [/("(?:user|account|org|organization)_?id"\s*:\s*")[^"]*"/gi, '$1<id-conta>"'],
+  [/\buser_[A-Za-z0-9]{16,}\b/g, '<id-conta>'],
+  [/\borg-[A-Za-z0-9]{12,}\b/g, '<id-conta>'],
 ];
 
 /** Hash FNV-1a de 32 bits. Sincrono e estavel — serve para agrupar, nao para

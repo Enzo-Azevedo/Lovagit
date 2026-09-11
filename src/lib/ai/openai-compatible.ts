@@ -190,11 +190,44 @@ export function providerKindForStatus(status: number): ProviderErrorKind {
   return 'http';
 }
 
-/** Mapeia o codigo do erro em banda para a classificacao do modulo de erros. */
-export function kindForStreamErrorCode(code: number | string | undefined): ProviderErrorKind {
+/**
+ * Frases com que os provedores recusam um identificador de modelo que nao
+ * existe. O status sozinho nao resolve: a doc do OpenRouter promete 404, mas na
+ * pratica o modelo digitado errado volta como 400 com a frase no corpo. E um
+ * 400 generico continua sendo defeito nosso — foi a extensao que montou o
+ * payload —, entao quem separa os dois casos e' o texto, nao o codigo.
+ */
+const MODELO_INEXISTENTE: RegExp[] = [
+  /is not a valid model/i,
+  /\bmodel[_ ]?not[_ ]?found\b/i,
+  /\b(unknown|invalid|unsupported|unrecognized) model\b/i,
+  /\bmodel\b[^.]{0,60}\b(does not exist|nao existe)\b/i,
+  /\bno such model\b/i,
+];
+
+export function isUnknownModelError(detail: string): boolean {
+  return MODELO_INEXISTENTE.some((pattern) => pattern.test(detail));
+}
+
+/**
+ * Classificacao com o corpo da resposta em maos. So mexe no balde `http` — o
+ * que ja caiu em auth, cota ou indisponivel foi decidido pelo status e nao
+ * muda por causa de texto. Modelo inexistente e' configuracao do usuario: quem
+ * conserta e' quem digitou o identificador, nao um commit aqui.
+ */
+export function providerKindForResponse(status: number, detail: string): ProviderErrorKind {
+  const kind = providerKindForStatus(status);
+  return kind === 'http' && isUnknownModelError(detail) ? 'unavailable' : kind;
+}
+
+/** Mapeia o erro em banda para a classificacao do modulo de erros. */
+export function kindForStreamErrorCode(
+  code: number | string | undefined,
+  message = '',
+): ProviderErrorKind {
   const numeric = typeof code === 'number' ? code : Number(code);
-  if (!Number.isFinite(numeric)) return 'http';
-  return providerKindForStatus(numeric);
+  if (!Number.isFinite(numeric)) return isUnknownModelError(message) ? 'unavailable' : 'http';
+  return providerKindForResponse(numeric, message);
 }
 
 export function finalizeToolCalls(acc: StreamAccumulator): ToolCall[] {
@@ -342,10 +375,13 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
         const dica =
           response.status === 401
             ? ' — a chave foi recusada. Confira em Configuracoes > Inteligencia artificial.'
-            : '';
+            : isUnknownModelError(detail)
+              ? ` — o provedor nao reconhece o modelo ${JSON.stringify(options.model)}. ` +
+                'Confira o identificador em Configuracoes > Inteligencia artificial.'
+              : '';
         throw new ProviderError(
           `${options.label} respondeu ${response.status}: ${detail.slice(0, 300) || response.statusText}${dica}`,
-          providerKindForStatus(response.status),
+          providerKindForResponse(response.status, detail),
         );
       }
 
@@ -441,7 +477,7 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
         throw new ProviderError(
           `${options.label} interrompeu a geracao: ${acc.error.message}` +
             (acc.error.code === undefined ? '' : ` (codigo ${acc.error.code})`),
-          kindForStreamErrorCode(acc.error.code),
+          kindForStreamErrorCode(acc.error.code, acc.error.message),
         );
       }
 
