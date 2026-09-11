@@ -56,7 +56,8 @@ export function buildIssueBody(report: ErrorReport, reason: string): string {
     '',
     '---',
     '<sub>Conteudo redigido na origem: nome de repositorio vira hash estavel, caminho de arquivo vira ' +
-      '`<arquivo .ext>`, credenciais e e-mails sao mascarados. Nenhum prompt ou trecho de codigo e enviado.</sub>',
+      '`<arquivo .ext>`, credenciais, e-mails e identificadores de conta sao mascarados. ' +
+      'Nenhum prompt ou trecho de codigo e enviado.</sub>',
   ].join('\n');
 }
 
