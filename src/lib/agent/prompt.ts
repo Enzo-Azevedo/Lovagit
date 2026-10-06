@@ -12,7 +12,7 @@ function formatLanguages(languages: Record<string, number>): string {
   const total = Object.values(languages).reduce((sum, bytes) => sum + bytes, 0);
   if (total === 0) return 'nao detectadas';
   return Object.entries(languages)
-    .sort(([, a], [b]) => b - a)
+    .sort(([, a], [, b]) => b - a)
     .slice(0, 6)
     .map(([lang, bytes]) => `${lang} ${Math.round((bytes / total) * 100)}%`)
     .join(', ');
