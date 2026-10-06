@@ -67,7 +67,7 @@ export function ErrorReportToast() {
                 Cancelar envio
               </Button>
               <Button variant="ghost" onClick={() => setPreviewId(item.id)}>
-                Ver o que sera enviado
+                Ver o que será enviado
               </Button>
               <Button variant="ghost" onClick={() => sendPendingNow(item.id)}>
                 Enviar agora
@@ -99,7 +99,7 @@ export function ErrorReportToast() {
       {preview && (
         <div className="rounded-md border border-ink-700 bg-ink-950 p-2">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-[11px] text-ink-200">Conteudo do relatorio</span>
+            <span className="text-[11px] text-ink-200">Conteúdo do relatório</span>
             <Button variant="ghost" onClick={() => setPreviewId(null)}>
               Fechar
             </Button>

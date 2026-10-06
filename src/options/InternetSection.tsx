@@ -67,15 +67,15 @@ export function InternetSection() {
       <h2 className="text-sm text-ink-200">9. Internet no agente</h2>
       <p className="text-xs text-ink-400">
         Ligando, o agente ganha a ferramenta <code>web_search</code>, que pesquisa na web pelo
-        DuckDuckGo — o unico caminho gratuito que nao exige chave nem conta. A busca devolve o
-        resumo do verbete (quando existe) e, quando nao, titulos, trechos e links de resultados.
-        Nao e uma varredura completa da web: pergunta muito recente ou obscura pode voltar vazia.
+        DuckDuckGo — o único caminho gratuito que não exige chave nem conta. A busca devolve o
+        resumo do verbete (quando existe) e, quando não, títulos, trechos e links de resultados.
+        Não é uma varredura completa da web: pergunta muito recente ou obscura pode voltar vazia.
       </p>
       <p className="text-xs text-ink-400">
-        Serve para fatos que <strong>nao estao neste repositorio</strong> e que o modelo nao tem
-        como saber — definicao de termo, sintaxe de biblioteca, versao atual de ferramenta. Para
-        ler o proprio repositorio, <code>read_file</code> e <code>search_code</code> continuam
-        sendo o caminho: sao mais precisos e nao saem da maquina.
+        Serve para fatos que <strong>não estão neste repositório</strong> e que o modelo não tem
+        como saber — definição de termo, sintaxe de biblioteca, versão atual de ferramenta. Para
+        ler o próprio repositório, <code>read_file</code> e <code>search_code</code> continuam
+        sendo o caminho: são mais precisos e não saem da máquina.
       </p>
 
       <label className="flex items-start gap-2 text-xs text-ink-200">
@@ -88,8 +88,8 @@ export function InternetSection() {
         <span>
           Ligar busca na web
           <span className="mt-1 block text-[11px] text-ink-400">
-            Desligada por padrao. Sem isto, a ferramenta <code>web_search</code> nem aparece no
-            prompt do agente. Ao ligar, o navegador pede permissao para acessar{' '}
+            Desligada por padrão. Sem isto, a ferramenta <code>web_search</code> nem aparece no
+            prompt do agente. Ao ligar, o navegador pede permissão para acessar{' '}
             <code>duckduckgo.com</code>.
           </span>
         </span>
@@ -97,8 +97,8 @@ export function InternetSection() {
 
       {semPermissao && (
         <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-300">
-          Sem permissao para acessar o DuckDuckGo — toda busca na web falharia. Marque{' '}
-          <strong>Ligar busca na web</strong> de novo para o navegador pedir a permissao.
+          Sem permissão para acessar o DuckDuckGo — toda busca na web falharia. Marque{' '}
+          <strong>Ligar busca na web</strong> de novo para o navegador pedir a permissão.
         </p>
       )}
 
@@ -113,12 +113,13 @@ export function InternetSection() {
           onChange={(event) => void updateOnlyWhenStuck(event.target.checked)}
         />
         <span>
-          Somente sob duvida severa
+          Somente sob dúvida severa
           <span className="mt-1 block text-[11px] text-ink-400">
-            Exige que o modelo explique, no campo <code>reason</code>, a duvida concreta que a
-            pesquisa resolve. Nao e so pedido no prompt: a extensao <strong>recusa na execucao</strong>{' '}
-            justificativa vazia, curta demais ou generica ("para confirmar"). Pesquisar para
-            confirmar o que ele ja sabe e desperdicio e e barrado.
+            Exige que o modelo explique, no campo <code>reason</code>, a dúvida concreta que a
+            pesquisa resolve. Não é só pedido no prompt: a extensão{' '}
+            <strong>recusa na execução</strong>{' '}
+            justificativa vazia, curta demais ou genérica ("para confirmar"). Pesquisar para
+            confirmar o que ele já sabe é desperdício e é barrado.
           </span>
         </span>
       </label>

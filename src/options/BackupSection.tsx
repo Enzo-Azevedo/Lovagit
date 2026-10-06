@@ -44,7 +44,7 @@ export function BackupSection() {
       URL.revokeObjectURL(url);
       setExportPassword('');
       setExportConfirm('');
-      setMessage('Backup gerado. Guarde o arquivo E a senha — sem ela, ele nao abre.');
+      setMessage('Backup gerado. Guarde o arquivo E a senha — sem ela, ele não abre.');
     } catch (caught) {
       setErro(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -64,8 +64,8 @@ export function BackupSection() {
       setArquivo(null);
       if (fileRef.current) fileRef.current.value = '';
       setMessage(
-        `Restaurado da versao ${resumo.fromVersion}: ${resumo.keys} item(ns) e ` +
-          `${resumo.secrets} credencial(is). Recarregue esta pagina para ver.`,
+        `Restaurado da versão ${resumo.fromVersion}: ${resumo.keys} item(ns) e ` +
+          `${resumo.secrets} credencial(is). Recarregue esta página para ver.`,
       );
     } catch (caught) {
       setErro(caught instanceof Error ? caught.message : String(caught));
@@ -79,16 +79,16 @@ export function BackupSection() {
       id="backup"
       className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4"
     >
-      <h2 className="text-sm text-ink-200">8. Backup das configuracoes</h2>
+      <h2 className="text-sm text-ink-200">8. Backup das configurações</h2>
       <p className="text-[11px] text-ink-400">
-        Ao desinstalar a extensao, o navegador apaga tudo — configuracoes, conversas, memoria e
-        cofre. Nao ha API que sobreviva a isso: para o Chrome, os dados sao da extensao, nao seus.
-        Este arquivo e' a unica travessia.
+        Ao desinstalar a extensão, o navegador apaga tudo — configurações, conversas, memória e
+        cofre. Não há API que sobreviva a isso: para o Chrome, os dados são da extensão, não seus.
+        Este arquivo é a única travessia.
       </p>
       <p className="text-[11px] text-ink-400">
-        Para trocar de versao voce <strong>nao precisa desinstalar</strong>: substitua o conteudo da
+        Para trocar de versão você <strong>não precisa desinstalar</strong>: substitua o conteúdo da
         pasta e clique em recarregar (⟳) em <code>chrome://extensions</code>. Nada se perde. O
-        backup e' para o resto — perfil recriado, pasta movida, maquina nova.
+        backup é para o resto — perfil recriado, pasta movida, máquina nova.
       </p>
 
       <div className="space-y-2 rounded-md border border-ink-700 bg-ink-950 p-3">
@@ -118,9 +118,9 @@ export function BackupSection() {
         </button>
         <p className="text-[10px] text-ink-400">
           Leva o PAT do GitHub, as chaves de API, os tokens dos servidores MCP, as conversas, a
-          memoria e os checkpoints. Fica de fora o que e' cache (o mapa dos repositorios se refaz
-          sozinho) e o que esta em transito. A senha nao e' guardada em lugar nenhum:{' '}
-          <strong>esquecendo, o arquivo nao abre</strong>.
+          memória e os checkpoints. Fica de fora o que é cache (o mapa dos repositórios se refaz
+          sozinho) e o que está em trânsito. A senha não é guardada em lugar nenhum:{' '}
+          <strong>esquecendo, o arquivo não abre</strong>.
         </p>
       </div>
 
@@ -150,7 +150,7 @@ export function BackupSection() {
           </button>
         </div>
         <p className="text-[10px] text-ink-400">
-          Restaurar substitui o que o backup traz e deixa o resto em paz — um repositorio conectado
+          Restaurar substitui o que o backup traz e deixa o resto em paz — um repositório conectado
           depois do backup continua aqui.
         </p>
       </div>

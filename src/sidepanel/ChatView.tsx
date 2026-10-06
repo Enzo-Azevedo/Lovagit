@@ -56,8 +56,8 @@ interface ChatViewProps {
 
 const MEMORY_LABEL: Record<string, string> = {
   request: 'pedido',
-  decision: 'decisao',
-  action: 'alteracao',
+  decision: 'decisão',
+  action: 'alteração',
 };
 
 export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatViewProps) {
@@ -145,7 +145,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         setMemoryError(null);
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : String(caught);
-        setMemoryError(`A memoria nao foi gravada: ${message}`);
+        setMemoryError(`A memória não foi gravada: ${message}`);
         void captureError(caught, {
           module: 'sidepanel/ChatView',
           repoId: repo.id,
@@ -279,13 +279,13 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     async (text: string, tentativa = 0, imagens: TurnImage[] = [], resumeHint?: string) => {
       if (!text || running) return;
       if (!activeProvider) {
-        setError('Nenhuma IA conectada. Configure um provedor nas configuracoes.');
+        setError('Nenhuma IA conectada. Configure um provedor nas configurações.');
         return;
       }
 
       const map = await getRepoMap(repo.id);
       if (!map) {
-        setError('Este repositorio ainda nao foi mapeado. Use "Remapear".');
+        setError('Este repositório ainda não foi mapeado. Use "Remapear".');
         return;
       }
 
@@ -555,7 +555,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
       {checkpoints.length > 0 && (
         <details className="glass shrink-0 border-b border-ink-700 bg-ink-900">
           <summary className="cursor-pointer px-3 py-1.5 text-[11px] text-ink-400">
-            Historico e backups ({checkpoints.length})
+            Histórico e backups ({checkpoints.length})
           </summary>
           <div className="max-h-64 space-y-2 overflow-y-auto border-t border-ink-700 p-2">
             {checkpoints.map((checkpoint) => (
@@ -601,7 +601,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         <button
           key={vinculo.platformId}
           className="glass shrink-0 border-b border-lov-orange/30 bg-lov-orange/10 px-3 py-1.5 text-left text-[11px] text-ink-200 hover:bg-lov-orange/15"
-          title="Abre as configuracoes na secao Conexoes"
+          title="Abre as configurações na seção Conexões"
           onClick={() =>
             void chrome.tabs.create({
               url: chrome.runtime.getURL('options/index.html#conexoes'),
@@ -609,9 +609,9 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           }
         >
           <strong>{platformById(vinculo.platformId)?.label ?? vinculo.platformId} vinculado, sem ferramenta.</strong>{' '}
-          O projeto <code className="font-mono">{vinculo.project.name}</code> esta configurado, mas
-          nao ha servidor MCP habilitado para este repositorio — a IA nao consegue consultar o
-          banco e vai dizer isso em vez de tentar pelo codigo. Clique para cadastrar.
+          O projeto <code className="font-mono">{vinculo.project.name}</code> está configurado, mas
+          não há servidor MCP habilitado para este repositório — a IA não consegue consultar o
+          banco e vai dizer isso em vez de tentar pelo código. Clique para cadastrar.
         </button>
       ))}
 
@@ -624,20 +624,20 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
         onToggle={(event) => setMemoryOpen(event.currentTarget.open)}
       >
         <summary className="cursor-pointer px-3 py-1.5 text-[11px] text-ink-400">
-          Memoria deste repositorio ({memory.length})
+          Memória deste repositório ({memory.length})
         </summary>
         <div className="max-h-64 space-y-2 overflow-y-auto border-t border-ink-700 p-2">
           {memoryError && <ErrorNote>{memoryError}</ErrorNote>}
           {memory.length === 0 ? (
             <p className="text-[10px] text-ink-400">
-              Nada guardado ainda. A memoria enche quando um pedido seu vira alteracao
-              commitada, ou quando a IA anota uma decisao no meio do caminho.
+              Nada guardado ainda. A memória enche quando um pedido seu vira alteração
+              commitada, ou quando a IA anota uma decisão no meio do caminho.
             </p>
           ) : (
             <>
               <p className="text-[10px] text-ink-400">
-                O que a IA leva para as proximas conversas. Se alguma linha estiver errada,
-                apague: memoria errada e repetida em todo prompt, e ai atrapalha mais do que
+                O que a IA leva para as próximas conversas. Se alguma linha estiver errada,
+                apague: memória errada é repetida em todo prompt, e aí atrapalha mais do que
                 ajuda.
               </p>
               {[...memory].reverse().map((entry) => (
@@ -660,7 +660,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
                 </div>
               ))}
               <Button variant="ghost" onClick={() => void forgetAll()}>
-                Esquecer tudo deste repositorio
+                Esquecer tudo deste repositório
               </Button>
             </>
           )}
@@ -672,9 +672,9 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           <div className="rounded-lg border border-dashed border-ink-700 p-4 text-xs text-ink-400">
             <p className="mb-2 text-ink-200">Chat isolado de {repo.id}</p>
             <p>
-              A IA conhece apenas este repositorio: arvore de arquivos, stack detectada e
-              arquivos-chave ja mapeados. Peca uma alteracao em linguagem natural — ela le o
-              codigo antes de escrever, cria uma branch de backup e commita em{' '}
+              A IA conhece apenas este repositório: árvore de arquivos, stack detectada e
+              arquivos-chave já mapeados. Peça uma alteração em linguagem natural — ela lê o
+              código antes de escrever, cria uma branch de backup e commita em{' '}
               <code className="font-mono text-ink-200">{repo.defaultBranch}</code>.
             </p>
           </div>
@@ -722,9 +722,9 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           <div className="flex items-center justify-between gap-2 rounded-lg border border-ink-700 bg-ink-900 p-2 text-xs text-ink-300">
             <span>
               {retry.secondsLeft === null
-                ? 'A geracao parou no meio.'
+                ? 'A geração parou no meio.'
                 : `Falha passageira. Reenviando em ${retry.secondsLeft}s (tentativa ${retry.attempt})...`}
-              {retry.resumeHint && ' O que ja foi gerado vai junto, para nao pagar duas vezes.'}
+              {retry.resumeHint && ' O que já foi gerado vai junto, para não pagar duas vezes.'}
             </span>
             <span className="flex shrink-0 gap-1">
               {retry.secondsLeft === null && (
@@ -754,7 +754,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
             <div className="flex items-center justify-between">
               <span className="text-xs text-amber-300">
-                {pending.length} alteracao(oes) pendente(s)
+                {pending.length} alteração(ões) pendente(s)
               </span>
               {!running && (
                 <div className="flex gap-1">
@@ -789,8 +789,8 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
               <DiffView key={change.path} change={change} />
             ))}
             <p className="text-[10px] text-ink-400">
-              Ao commitar, uma branch de backup da {repo.defaultBranch} e criada antes — da para
-              voltar depois pelo historico, no topo do painel.
+              Ao commitar, uma branch de backup da {repo.defaultBranch} é criada antes — dá para
+              voltar depois pelo histórico, no topo do painel.
             </p>
           </div>
         )}
@@ -860,7 +860,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
             }
           }}
           rows={3}
-          placeholder={`O que voce quer mudar em ${repo.name}?`}
+          placeholder={`O que você quer mudar em ${repo.name}?`}
           className="w-full resize-none rounded-md border border-ink-700 bg-ink-950 p-2 text-[13px] text-ink-200 outline-none placeholder:text-ink-600 focus:border-ink-600"
         />
 
@@ -908,7 +908,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
                 disabled={!input.trim() || blockedByVision}
                 title={
                   blockedByVision
-                    ? `${activeProvider?.model ?? 'O modelo'} nao le imagens`
+                    ? `${activeProvider?.model ?? 'O modelo'} não lê imagens`
                     : undefined
                 }
               >

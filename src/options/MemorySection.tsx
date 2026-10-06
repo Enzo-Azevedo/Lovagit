@@ -48,12 +48,12 @@ export function MemorySection() {
 
   return (
     <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
-      <h2 className="text-sm text-ink-200">5. Memoria dos repositorios</h2>
+      <h2 className="text-sm text-ink-200">5. Memória dos repositórios</h2>
       <p className="text-xs text-ink-400">
-        A IA guarda o que voce pediu e o que foi aplicado, e leva um recorte disso para as
-        proximas conversas. O teto abaixo vale para o conjunto de todos os repositorios: um
-        projeto sozinho pode ocupar quase tudo, e a compressao so entra quando o total passa do
-        limite — comprimindo primeiro o mais antigo, de qualquer repositorio.
+        A IA guarda o que você pediu e o que foi aplicado, e leva um recorte disso para as
+        próximas conversas. O teto abaixo vale para o conjunto de todos os repositórios: um
+        projeto sozinho pode ocupar quase tudo, e a compressão só entra quando o total passa do
+        limite — comprimindo primeiro o mais antigo, de qualquer repositório.
       </p>
 
       {usage && (
@@ -71,8 +71,8 @@ export function MemorySection() {
             ))}
           {usage.entries === 0 && (
             <p className="text-[10px] text-ink-400">
-              Nada guardado ainda. A memoria comeca a encher quando um pedido seu vira alteracao
-              no repositorio.
+              Nada guardado ainda. A memória começa a encher quando um pedido seu vira alteração
+              no repositório.
             </p>
           )}
         </div>
@@ -100,19 +100,19 @@ export function MemorySection() {
 
       {ilimitado ? (
         <p className="text-[11px] text-emerald-400">
-          Armazenamento ilimitado concedido — o teto acima vale como voce configurou.
+          Armazenamento ilimitado concedido — o teto acima vale como você configurou.
         </p>
       ) : (
         <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2">
           <p className="text-[11px] text-amber-300">
-            A permissao de armazenamento ilimitado ainda nao esta ativa nesta instalacao. Ela e'
-            concedida na instalacao — o Chrome nao aceita pedi-la em tempo de execucao — entao
-            recarregue a extensao em <code>chrome://extensions</code> para que ela passe a valer.
+            A permissão de armazenamento ilimitado ainda não está ativa nesta instalação. Ela é
+            concedida na instalação — o Chrome não aceita pedi-la em tempo de execução — então
+            recarregue a extensão em <code>chrome://extensions</code> para que ela passe a valer.
           </p>
           <p className="text-[10px] text-ink-400">
-            Ate la, a memoria se limita sozinha a {formatarBytes(BUDGET_SEM_PERMISSAO_BYTES)} dos{' '}
-            {formatarBytes(10 * MB)} que o Chrome da para TUDO que a extensao guarda — mapa,
-            conversas, historico. Passar disso faria a gravacao falhar.
+            Até lá, a memória se limita sozinha a {formatarBytes(BUDGET_SEM_PERMISSAO_BYTES)} dos{' '}
+            {formatarBytes(10 * MB)} que o Chrome dá para TUDO que a extensão guarda — mapa,
+            conversas, histórico. Passar disso faria a gravação falhar.
           </p>
         </div>
       )}

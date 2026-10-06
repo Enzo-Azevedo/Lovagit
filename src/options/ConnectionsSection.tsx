@@ -54,7 +54,7 @@ export function ConnectionsSection() {
       await setMcpServerToken(serverId, tokenDrafts[serverId] ?? '');
       setMessage(
         (tokenDrafts[serverId] ?? '').trim()
-          ? 'Token guardado no cofre. Clique em "Reconectar" para usa-lo.'
+          ? 'Token guardado no cofre. Clique em "Reconectar" para usá-lo.'
           : 'Token removido. O servidor volta a usar o login OAuth.',
       );
       await reload();
@@ -102,8 +102,8 @@ export function ConnectionsSection() {
       const granted = await requestHostPermission(serverUrl);
       if (!granted) {
         setMessage(
-          `Sem permissao para acessar ${originPatternFor(serverUrl) ?? serverUrl}. ` +
-            'O navegador bloqueia a conexao com o servidor enquanto ela nao for concedida.',
+          `Sem permissão para acessar ${originPatternFor(serverUrl) ?? serverUrl}. ` +
+            'O navegador bloqueia a conexão com o servidor enquanto ela não for concedida.',
         );
         await reload();
         return;
@@ -118,7 +118,7 @@ export function ConnectionsSection() {
     if (!pendingOrigin) return;
     const granted = await chrome.permissions.request({ origins: [`${pendingOrigin.origin}/*`] });
     if (!granted) {
-      setMessage(`Sem permissao para ${pendingOrigin.origin} — o login nao tem como acontecer.`);
+      setMessage(`Sem permissão para ${pendingOrigin.origin} — o login não tem como acontecer.`);
       return;
     }
     const { serverId } = pendingOrigin;
@@ -131,11 +131,11 @@ export function ConnectionsSection() {
     try {
       config = createServerConfig(label, url);
     } catch {
-      setMessage('URL invalida.');
+      setMessage('URL inválida.');
       return;
     }
     if (!/^https:\/\//i.test(config.url)) {
-      setMessage('Use uma URL https — o navegador bloqueia http em extensao.');
+      setMessage('Use uma URL https — o navegador bloqueia http em extensão.');
       return;
     }
     // Primeiro await do clique, pelo motivo explicado em
@@ -144,7 +144,7 @@ export function ConnectionsSection() {
     const granted = await requestHostPermission(config.url);
     if (!granted) {
       setMessage(
-        `Sem permissao para acessar ${originPatternFor(config.url) ?? config.url}. ` +
+        `Sem permissão para acessar ${originPatternFor(config.url) ?? config.url}. ` +
           'O servidor foi salvo; clique em "Reconectar" para conceder e tentar de novo.',
       );
       await upsertMcpServer(config);
@@ -163,26 +163,26 @@ export function ConnectionsSection() {
 
   return (
     <section id="conexoes" className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
-      <h2 className="text-sm text-ink-200">6. Conexoes</h2>
+      <h2 className="text-sm text-ink-200">6. Conexões</h2>
       <p className="text-[11px] text-ink-400">
-        Credenciais e ferramentas que o agente pode usar alem do GitHub. Sao de dois tipos:
-        plataformas conhecidas, onde basta o token pessoal, e servidores MCP, que sao qualquer
-        endereco que fale o protocolo.
+        Credenciais e ferramentas que o agente pode usar além do GitHub. São de dois tipos:
+        plataformas conhecidas, onde basta o token pessoal, e servidores MCP, que são qualquer
+        endereço que fale o protocolo.
       </p>
 
       <PlatformsBlock onMessage={setMessage} />
 
       <h3 className="pt-2 text-xs text-ink-200">Servidores MCP (ferramentas extras)</h3>
       <p className="text-[11px] text-ink-400">
-        Servidores MCP dao ferramentas ao agente — consultar um banco, ler um projeto, abrir um
-        chamado. Eles nao substituem o provedor de IA: o modelo continua vindo da chave configurada
-        acima. A conexao usa o login do proprio provedor: descoberta de metadados, registro dinamico
-        de cliente e consentimento na pagina dele, sem client_id digitado a mao.
+        Servidores MCP dão ferramentas ao agente — consultar um banco, ler um projeto, abrir um
+        chamado. Eles não substituem o provedor de IA: o modelo continua vindo da chave configurada
+        acima. A conexão usa o login do próprio provedor: descoberta de metadados, registro dinâmico
+        de cliente e consentimento na página dele, sem client_id digitado à mão.
       </p>
       <p className="text-[11px] text-ink-400">
-        Ao conectar, o navegador pede permissao de acesso ao dominio do servidor. Sem conceder, a
-        requisicao e' barrada antes de sair e o erro que aparece e' <code>Failed to fetch</code> —
-        que parece servidor fora do ar, mas e' permissao faltando.
+        Ao conectar, o navegador pede permissão de acesso ao domínio do servidor. Sem conceder, a
+        requisição é barrada antes de sair e o erro que aparece é <code>Failed to fetch</code> —
+        que parece servidor fora do ar, mas é permissão faltando.
       </p>
 
       <div className="grid grid-cols-[1fr_2fr_auto] gap-2">
@@ -212,7 +212,7 @@ export function ConnectionsSection() {
       {pendingOrigin && (
         <div className="flex items-center justify-between gap-2 rounded-md border border-lov-orange/30 bg-lov-orange/10 px-3 py-2 text-[11px] text-ink-200">
           <span>
-            O login deste servidor acontece em <code>{pendingOrigin.origin}</code>, que ainda nao
+            O login deste servidor acontece em <code>{pendingOrigin.origin}</code>, que ainda não
             foi liberado.
           </span>
           <button className={primaryButton} onClick={() => void grantPendingOrigin()}>
@@ -295,18 +295,18 @@ export function ConnectionsSection() {
               </button>
             </div>
             <p className="mt-1 text-[10px] text-ink-400">
-              Para servidor que nao faz login por OAuth, ou quando voce prefere um token proprio —
-              use quando o servico nao faz login por OAuth, ou quando voce prefere um token
-              proprio. Havendo token, ele e' usado no lugar do OAuth. Plataforma ja cadastrada
-              acima dispensa isto: o token dela vale para o servidor MCP do mesmo servico.
+              Para servidor que não faz login por OAuth, ou quando você prefere um token próprio —
+              use quando o serviço não faz login por OAuth, ou quando você prefere um token
+              próprio. Havendo token, ele é usado no lugar do OAuth. Plataforma já cadastrada
+              acima dispensa isto: o token dela vale para o servidor MCP do mesmo serviço.
             </p>
           </div>
 
           <div>
-            <p className="mb-1 text-[11px] text-ink-200">Habilitado nos repositorios</p>
+            <p className="mb-1 text-[11px] text-ink-200">Habilitado nos repositórios</p>
             {repoIds.length === 0 ? (
               <p className="text-[10px] text-ink-400">
-                Conecte um repositorio no painel lateral para poder habilitar aqui.
+                Conecte um repositório no painel lateral para poder habilitar aqui.
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
@@ -327,8 +327,8 @@ export function ConnectionsSection() {
               </div>
             )}
             <p className="mt-1 text-[10px] text-ink-400">
-              O chat de um repositorio so enxerga as ferramentas marcadas para ele — e assim que o
-              MCP nao vira um atalho entre repositorios.
+              O chat de um repositório só enxerga as ferramentas marcadas para ele — é assim que o
+              MCP não vira um atalho entre repositórios.
             </p>
           </div>
 

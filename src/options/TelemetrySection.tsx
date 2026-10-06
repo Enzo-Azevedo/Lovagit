@@ -46,7 +46,7 @@ export function TelemetrySection() {
 
   return (
     <section className="space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
-      <h2 className="text-sm text-ink-200">7. Deteccao e relato de erros</h2>
+      <h2 className="text-sm text-ink-200">7. Detecção e relato de erros</h2>
 
       <label className="flex items-start gap-2 text-xs text-ink-200">
         <input
@@ -58,10 +58,10 @@ export function TelemetrySection() {
         <span>
           Abrir issue automaticamente quando um defeito for detectado
           <span className="mt-1 block text-[11px] text-ink-400">
-            Só defeito vira issue. Erro de configuracao (chave errada, token sem permissao) e
-            falha passageira (offline, rate limit) ficam apenas na interface. Erros da propria
-            extensao entram com as labels <code>{LABELS.highPriority}</code> e{' '}
-            <code>{LABELS.extensionError}</code>; falhas de servico externo entram com{' '}
+            Só defeito vira issue. Erro de configuração (chave errada, token sem permissão) e
+            falha passageira (offline, rate limit) ficam apenas na interface. Erros da própria
+            extensão entram com as labels <code>{LABELS.highPriority}</code> e{' '}
+            <code>{LABELS.extensionError}</code>; falhas de serviço externo entram com{' '}
             <code>{LABELS.integrationError}</code>.
           </span>
         </span>
@@ -69,19 +69,19 @@ export function TelemetrySection() {
 
       <div className="grid grid-cols-3 gap-3">
         <div className="col-span-3 space-y-1">
-          <span className="block text-xs text-ink-200">Repositorio de destino</span>
+          <span className="block text-xs text-ink-200">Repositório de destino</span>
           <p className="rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 font-mono text-xs text-ink-400">
             {ISSUE_TARGET_REPO} <span className="text-ink-600">(fixo)</span>
           </p>
           <span className="block text-[11px] text-ink-400">
-            O destino nao e' configuravel: e' o repositorio da propria extensao. Apontar para outro
-            lugar so ofereceria formas de quebrar — um repositorio sem <code>Issues: write</code> no
-            seu PAT faria todo relato falhar em silencio, e um repositorio de terceiro receberia
+            O destino não é configurável: é o repositório da própria extensão. Apontar para outro
+            lugar só ofereceria formas de quebrar — um repositório sem <code>Issues: write</code> no
+            seu PAT faria todo relato falhar em silêncio, e um repositório de terceiro receberia
             stack traces e caminhos de arquivo seus.
           </span>
           <span className="block text-[11px] text-ink-400">
             O PAT precisa de <code>Issues: Read and write</code> nele. Sem push access, o GitHub
-            descarta as labels em silencio — por isso a prioridade tambem vai escrita no corpo do
+            descarta as labels em silêncio — por isso a prioridade também vai escrita no corpo do
             issue.
           </span>
         </div>
@@ -113,7 +113,7 @@ export function TelemetrySection() {
 
       <details className="rounded-md border border-ink-700 bg-ink-950">
         <summary className="cursor-pointer px-3 py-2 text-xs text-ink-400">
-          Historico local de relatorios ({log.length})
+          Histórico local de relatórios ({log.length})
         </summary>
         <div className="space-y-1 border-t border-ink-700 p-2">
           {log.length === 0 && <p className="text-[11px] text-ink-400">Nenhum erro registrado.</p>}

@@ -78,7 +78,7 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
       if (!url) return;
 
       if (!(await requestHostPermission(url))) {
-        onMessage(`Sem permissao para ${new URL(url).origin} — o servidor nao teria como conectar.`);
+        onMessage(`Sem permissão para ${new URL(url).origin} — o servidor não teria como conectar.`);
         return;
       }
 
@@ -110,7 +110,7 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
       // usuario, e qualquer await antes dele ja encerra o gesto.
       if (token && plataforma && !(await requestHostPermission(plataforma.apiOrigin))) {
         onMessage(
-          `Sem permissao para ${plataforma.apiOrigin} — o token nao tem como ser verificado nem usado.`,
+          `Sem permissão para ${plataforma.apiOrigin} — o token não tem como ser verificado nem usado.`,
         );
         return;
       }
@@ -203,8 +203,8 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
 
             {prefixoEstranho && (
               <p className="text-[10px] text-ink-400">
-                Um token do {plataforma.label} comeca com <code>{plataforma.tokenPrefix}</code> — o
-                que esta ai parece ser outra credencial.
+                Um token do {plataforma.label} começa com <code>{plataforma.tokenPrefix}</code> — o
+                que está aí parece ser outra credencial.
               </p>
             )}
 
@@ -214,16 +214,16 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
             )}
 
             <p className="text-[10px] text-ink-400">
-              {plataforma.scopeWarning} Fica no cofre cifrado, e serve tambem para o servidor MCP do
-              proprio {plataforma.label} — sem precisar cadastrar duas vezes.
+              {plataforma.scopeWarning} Fica no cofre cifrado, e serve também para o servidor MCP do
+              próprio {plataforma.label} — sem precisar cadastrar duas vezes.
             </p>
 
             {conexao?.hasToken && (
               <div className="space-y-1 border-t border-ink-800 pt-2">
-                <p className="text-[11px] text-ink-200">Projeto de cada repositorio</p>
+                <p className="text-[11px] text-ink-200">Projeto de cada repositório</p>
                 {repoIds.length === 0 ? (
                   <p className="text-[10px] text-ink-400">
-                    Conecte um repositorio no painel lateral para poder vincular aqui.
+                    Conecte um repositório no painel lateral para poder vincular aqui.
                   </p>
                 ) : (
                   <div className="space-y-1">
@@ -246,7 +246,7 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
                               void vincular(plataforma.id, repoId, event.target.value)
                             }
                           >
-                            <option value="">Nenhum — a IA nao vera este servico</option>
+                            <option value="">Nenhum — a IA não verá este serviço</option>
                             {(conexao.projects ?? []).map((projeto) => (
                               <option key={projeto.ref} value={projeto.ref}>
                                 {projeto.name}
@@ -259,8 +259,8 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
                               <div className="space-y-1 rounded-md border border-lov-orange/30 bg-lov-orange/10 p-2">
                                 <p className="text-[10px] text-lov-orange">
                                   Vinculado, mas sem servidor MCP do {plataforma.label} habilitado
-                                  para este repositorio — a IA sabe do projeto e nao tem como
-                                  acessa-lo.
+                                  para este repositório — a IA sabe do projeto e não tem como
+                                  acessá-lo.
                                 </p>
                                 <button
                                   className={primaryButton}
@@ -271,13 +271,13 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
                                 >
                                   {ocupado === plataforma.id
                                     ? 'Cadastrando...'
-                                    : 'Cadastrar servidor MCP para este repositorio'}
+                                    : 'Cadastrar servidor MCP para este repositório'}
                                 </button>
                                 <p className="text-[10px] text-ink-400">
                                   Cria o servidor preso a este projeto (<code>project_ref</code>) e
-                                  em somente leitura (<code>read_only</code>), habilitado so para{' '}
-                                  <code className="font-mono">{repoId}</code>. Usa o token que voce
-                                  ja salvou acima — sem login novo.
+                                  em somente leitura (<code>read_only</code>), habilitado só para{' '}
+                                  <code className="font-mono">{repoId}</code>. Usa o token que você
+                                  já salvou acima — sem login novo.
                                 </p>
                               </div>
                             )}
@@ -288,11 +288,11 @@ export function PlatformsBlock({ onMessage }: { onMessage: (texto: string | null
                   </div>
                 )}
                 <p className="text-[10px] text-ink-400">
-                  A escolha e' obrigatoria e nao tem padrao. Sem ela o chat daquele repositorio nem
-                  fica sabendo que o {plataforma.label} existe — o que e' melhor do que saber pela
-                  metade: o token alcanca a conta inteira, e um modelo que sabe do servico mas nao
-                  do projeto sai listando todos e tentando ate acertar, num turno pago para achar
-                  o que voce ja sabia. Com o vinculo, o ref do projeto vai escrito no prompt.
+                  A escolha é obrigatória e não tem padrão. Sem ela o chat daquele repositório nem
+                  fica sabendo que o {plataforma.label} existe — o que é melhor do que saber pela
+                  metade: o token alcança a conta inteira, e um modelo que sabe do serviço mas não
+                  do projeto sai listando todos e tentando até acertar, num turno pago para achar
+                  o que você já sabia. Com o vínculo, o ref do projeto vai escrito no prompt.
                 </p>
               </div>
             )}

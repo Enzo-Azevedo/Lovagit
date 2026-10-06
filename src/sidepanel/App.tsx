@@ -43,11 +43,11 @@ export function App() {
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
         <h1 className="text-sm font-medium text-ink-200">Lovagit</h1>
         <p className="text-xs text-ink-400">
-          Conecte um token PAT do GitHub para listar seus repositorios. Cada repositorio vira um
+          Conecte um token PAT do GitHub para listar seus repositórios. Cada repositório vira um
           chat isolado com a IA.
         </p>
         <Button variant="primary" onClick={openOptions}>
-          Abrir configuracoes
+          Abrir configurações
         </Button>
       </div>
     );
@@ -61,27 +61,27 @@ export function App() {
           onChange={(event) => setActiveRepoId(event.target.value || null)}
           className="min-w-0 flex-1 truncate rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs text-ink-200 outline-none"
         >
-          {state.repos.length === 0 && <option value="">Nenhum repositorio conectado</option>}
+          {state.repos.length === 0 && <option value="">Nenhum repositório conectado</option>}
           {state.repos.map((repo) => (
             <option key={repo.id} value={repo.id}>
               {repo.id}
             </option>
           ))}
         </select>
-        <Button variant="ghost" onClick={() => setPicking((value) => !value)} title="Repositorios">
+        <Button variant="ghost" onClick={() => setPicking((value) => !value)} title="Repositórios">
           {picking ? 'Voltar' : 'Repos'}
         </Button>
         {activeRepo && !picking && (
           <Button
             variant="ghost"
-            title="Refaz o mapeamento do repositorio"
+            title="Refaz o mapeamento do repositório"
             disabled={state.mappingRepoId !== null}
             onClick={() => void remap(activeRepo.id)}
           >
             {state.mappingRepoId === activeRepo.id ? '...' : 'Remapear'}
           </Button>
         )}
-        <Button variant="ghost" onClick={openOptions} title="Configuracoes">
+        <Button variant="ghost" onClick={openOptions} title="Configurações">
           ⚙
         </Button>
       </header>
@@ -121,11 +121,11 @@ export function App() {
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
           <p className="text-xs text-ink-400">
-            Nenhum repositorio conectado ainda. Cada um que voce conectar vira um chat proprio,
+            Nenhum repositório conectado ainda. Cada um que você conectar vira um chat próprio,
             com contexto separado.
           </p>
           <Button variant="primary" onClick={() => setPicking(true)}>
-            Escolher repositorios
+            Escolher repositórios
           </Button>
         </div>
       )}

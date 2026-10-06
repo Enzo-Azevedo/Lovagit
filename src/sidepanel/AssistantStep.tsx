@@ -27,7 +27,7 @@ export function AssistantStep({
       {message.reasoning && (
         <details className="rounded-md border border-ink-800 bg-ink-900/60">
           <summary className="cursor-pointer px-2 py-1 text-[10px] text-ink-500 hover:text-ink-300">
-            Raciocinio deste passo
+            Raciocínio deste passo
           </summary>
           <div className="max-h-48 overflow-y-auto whitespace-pre-wrap border-t border-ink-800 p-2 font-mono text-[10px] leading-relaxed text-ink-400">
             {message.reasoning}

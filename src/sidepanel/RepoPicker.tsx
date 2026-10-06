@@ -53,7 +53,7 @@ export function RepoPicker({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Filtrar repositorios..."
+          placeholder="Filtrar repositórios..."
           className="flex-1 rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs outline-none placeholder:text-ink-600 focus:border-ink-600"
         />
         <Button variant="ghost" onClick={onClose}>
@@ -63,7 +63,7 @@ export function RepoPicker({
 
       <div className="flex-1 space-y-1 overflow-y-auto p-2">
         {error && <ErrorNote>{error}</ErrorNote>}
-        {!repos && !error && <Spinner label="Carregando repositorios do GitHub..." />}
+        {!repos && !error && <Spinner label="Carregando repositórios do GitHub..." />}
 
         {filtered.map((repo) => {
           const connected = connectedIds.includes(repo.id);
@@ -97,7 +97,7 @@ export function RepoPicker({
         })}
 
         {repos && filtered.length === 0 && (
-          <p className="p-4 text-center text-xs text-ink-400">Nenhum repositorio encontrado.</p>
+          <p className="p-4 text-center text-xs text-ink-400">Nenhum repositório encontrado.</p>
         )}
       </div>
     </div>

@@ -185,7 +185,7 @@ export function Options() {
       if (origin) {
         const granted = await chrome.permissions.request({ origins: [origin] });
         if (!granted) {
-          setMessage(`Sem permissao para acessar ${origin} — a extensao nao conseguira chamar a API.`);
+          setMessage(`Sem permissão para acessar ${origin} — a extensão não conseguirá chamar a API.`);
           return;
         }
       }
@@ -222,7 +222,7 @@ export function Options() {
       if (origin) await chrome.permissions.request({ origins: [origin] });
       try {
         await loginWithOAuth(provider);
-        setMessage(`Login em ${provider.label} concluido.`);
+        setMessage(`Login em ${provider.label} concluído.`);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : String(error));
       }
@@ -255,7 +255,7 @@ export function Options() {
       <header>
         <h1 className="text-base font-medium text-ink-200">Lovagit</h1>
         <p className="text-xs text-ink-400">
-          Um chat de IA por repositorio do GitHub, com contexto isolado e commits protegidos por
+          Um chat de IA por repositório do GitHub, com contexto isolado e commits protegidos por
           branch de backup.
         </p>
       </header>
@@ -274,8 +274,8 @@ export function Options() {
           href="#backup"
           className="block rounded-lg border border-lov-orange/30 bg-lov-orange/10 px-3 py-2 text-xs text-ink-200 hover:border-lov-orange/60"
         >
-          <strong>Instalacao nova.</strong> Se voce guardou um backup de outra instalacao, importe
-          antes de configurar do zero — ele traz repositorios, provedores, conversas e memoria.
+          <strong>Instalação nova.</strong> Se você guardou um backup de outra instalação, importe
+          antes de configurar do zero — ele traz repositórios, provedores, conversas e memória.
           <span className="ml-1 text-lov-orange">Ir para o backup →</span>
         </a>
       )}
@@ -287,7 +287,7 @@ export function Options() {
           <div className="space-y-2">
             <p className="text-[11px] text-ink-400">
               Contas conectadas. A ativa responde pelas chamadas da API — trocar aqui muda quais
-              repositorios aparecem no painel.
+              repositórios aparecem no painel.
             </p>
             {settings.githubAccounts.map((account) => (
               <div
@@ -333,7 +333,7 @@ export function Options() {
 
         <Field
           label="Adicionar conta (Personal Access Token)"
-          hint="Fine-grained: permissoes Contents (read & write) e Metadata (read) nos repositorios desejados. Classico: escopo repo. O token e cifrado com AES-GCM antes de ir para o storage."
+          hint="Fine-grained: permissões Contents (read & write) e Metadata (read) nos repositórios desejados. Clássico: escopo repo. O token é cifrado com AES-GCM antes de ir para o storage."
         >
           <div className="flex gap-2">
             <input
@@ -358,7 +358,7 @@ export function Options() {
 
       <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm text-ink-200">2. Inteligencia artificial</h2>
+          <h2 className="text-sm text-ink-200">2. Inteligência artificial</h2>
           <select
             className={`${inputClass} w-auto`}
             value=""
@@ -434,10 +434,10 @@ export function Options() {
             {provider.kind === 'oauth' ? (
               <div className="space-y-3">
                 <p className="rounded-md border border-ink-700 bg-ink-900 px-2 py-1.5 text-[11px] text-ink-400">
-                  Anthropic e OpenAI nao oferecem OAuth para acesso a API por terceiros — a
-                  Anthropic restringe o fluxo ao Claude Code e ao claude.ai, e o login da OpenAI e
-                  identidade, nao acesso a API. Para essas duas, use chave de API acima. Este bloco
-                  serve para provedores que expoem OAuth para a propria API.
+                  Anthropic e OpenAI não oferecem OAuth para acesso à API por terceiros — a
+                  Anthropic restringe o fluxo ao Claude Code e ao claude.ai, e o login da OpenAI é
+                  identidade, não acesso à API. Para essas duas, use chave de API acima. Este bloco
+                  serve para provedores que expõem OAuth para a própria API.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Authorization URL">
@@ -463,7 +463,7 @@ export function Options() {
                       onChange={(event) => void updateProvider(provider.id, { clientId: event.target.value })}
                     />
                   </Field>
-                  <Field label="Scopes (separados por espaco)">
+                  <Field label="Scopes (separados por espaço)">
                     <input
                       className={inputClass}
                       value={provider.scopes.join(' ')}
@@ -477,7 +477,7 @@ export function Options() {
                 </div>
                 <Field
                   label="Redirect URI (registre esta URL no provedor)"
-                  hint="A extensao usa OAuth 2.0 com PKCE e nao guarda client_secret — nao existe segredo seguro em codigo que roda no navegador."
+                  hint="A extensão usa OAuth 2.0 com PKCE e não guarda client_secret — não existe segredo seguro em código que roda no navegador."
                 >
                   <input className={inputClass} readOnly value={getRedirectUri()} />
                 </Field>
@@ -502,7 +502,7 @@ export function Options() {
             ) : (
               <Field
                 label="Chave de API"
-                hint="Cifrada no cofre local. Nunca sai do navegador exceto para o proprio provedor."
+                hint="Cifrada no cofre local. Nunca sai do navegador exceto para o próprio provedor."
               >
                 <div className="mb-1.5 flex flex-wrap items-center gap-2">
                   {(() => {
@@ -571,13 +571,13 @@ export function Options() {
       </section>
 
       <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
-        <h2 className="text-sm text-ink-200">2.5. Caracteres maximos de raciocinio</h2>
+        <h2 className="text-sm text-ink-200">2.5. Caracteres máximos de raciocínio</h2>
         <p className="text-xs text-ink-400">
-          Teto de caracteres do raciocinio exibido e guardado por passo, antes de ser marcado
-          como truncado. Vale so para a tela: o raciocinio nunca volta ao modelo.
+          Teto de caracteres do raciocínio exibido e guardado por passo, antes de ser marcado
+          como truncado. Vale só para a tela: o raciocínio nunca volta ao modelo.
         </p>
         <label className="block text-xs text-ink-200">
-          Caracteres maximos
+          Caracteres máximos
           <span className="mt-1 flex gap-2">
             <input
               type="text"
@@ -598,7 +598,7 @@ export function Options() {
       </section>
 
       <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
-        <h2 className="text-sm text-ink-200">3. Politica de commit</h2>
+        <h2 className="text-sm text-ink-200">3. Política de commit</h2>
         <label className="flex items-start gap-2 text-xs text-ink-200">
           <input
             type="checkbox"
@@ -607,12 +607,12 @@ export function Options() {
             onChange={(event) => void saveSettings({ autoApplyChanges: event.target.checked }).then(reload)}
           />
           <span>
-            Commitar automaticamente na branch padrao
+            Commitar automaticamente na branch padrão
             <span className="mt-1 block text-[11px] text-ink-400">
-              Com a opcao ligada, a IA cria a branch de backup e commita sozinha ao terminar a
-              alteracao. Desligada, as alteracoes ficam esperando seu clique em "Commitar" no chat.
-              Em ambos os casos a branch de backup e criada antes do commit, e da para voltar pelo
-              historico.
+              Com a opção ligada, a IA cria a branch de backup e commita sozinha ao terminar a
+              alteração. Desligada, as alterações ficam esperando seu clique em "Commitar" no chat.
+              Em ambos os casos a branch de backup é criada antes do commit, e dá para voltar pelo
+              histórico.
             </span>
           </span>
         </label>
@@ -630,15 +630,15 @@ export function Options() {
             }
           />
           <span>
-            Reenviar a mensagem automaticamente apos 5 segundos
+            Reenviar a mensagem automaticamente após 5 segundos
             <span className="mt-1 block text-[11px] text-ink-400">
-              Vale so para falha passageira — queda de conexao, 429 e erro 5xx do provedor, como o
-              "Upstream idle timeout exceeded" do OpenRouter. Chave invalida, modelo inexistente e
-              erro da extensao nao sao reenviados, porque a segunda tentativa daria no mesmo. O
+              Vale só para falha passageira — queda de conexão, 429 e erro 5xx do provedor, como o
+              "Upstream idle timeout exceeded" do OpenRouter. Chave inválida, modelo inexistente e
+              erro da extensão não são reenviados, porque a segunda tentativa daria no mesmo. O
               reenvio insiste sem limite de tentativas, porque provedor gratuito costuma ficar
-              fora do ar por minutos seguidos. A contagem aparece no chat com o numero da tentativa
-              e um botao de cancelar, e mandar outra mensagem tambem interrompe. Nao acontece se o
-              turno ja tiver commitado alguma coisa.
+              fora do ar por minutos seguidos. A contagem aparece no chat com o número da tentativa
+              e um botão de cancelar, e mandar outra mensagem também interrompe. Não acontece se o
+              turno já tiver commitado alguma coisa.
             </span>
           </span>
         </label>
