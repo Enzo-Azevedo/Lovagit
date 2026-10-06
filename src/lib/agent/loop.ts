@@ -27,8 +27,12 @@ import { buildToolSchemas, executeTool, indexBlobsByPath, type ToolRuntime } fro
 const MAX_STEPS = 16;
 /** Mensagens de historico enviadas ao modelo (as mais recentes). */
 const HISTORY_WINDOW = 60;
-/** Teto do raciocinio guardado por passo. So a exibicao usa isso. */
-const MAX_REASONING_CHARS = 4000;
+/**
+ * Teto do raciocinio guardado por passo. So a exibicao usa isso: o raciocinio
+ * nunca volta ao modelo — ele ja sabe o que pensou, e alguns provedores
+ * recusam o campo de volta.
+ */
+const MAX_REASONING_CHARS = 32_000;
 
 function trimReasoning(reasoning: string | undefined): string | undefined {
   if (!reasoning) return undefined;

@@ -133,11 +133,11 @@ describe('raciocinio por passo', () => {
 
   it('trunca raciocinio gigante — ele e para ler, nao para encher o storage', async () => {
     const { messages } = await run(
-      providerReturning({ text: 'pronto', reasoning: 'p'.repeat(50_000) }),
+      providerReturning({ text: 'pronto', reasoning: 'p'.repeat(100_000) }),
     );
 
     const raciocinio = messages.find((m) => m.role === 'assistant')?.reasoning ?? '';
-    expect(raciocinio.length).toBeLessThan(5000);
+    expect(raciocinio.length).toBeLessThan(33_000);
     expect(raciocinio).toContain('truncado');
   });
 
