@@ -15,6 +15,29 @@
 
 const ENDPOINT = 'https://api.duckduckgo.com/';
 
+/**
+ * Origem que a busca usa. Precisa de permissao de host: sem ela, o fetch sai de
+ * uma pagina de extensao como requisicao cross-origin comum e o navegador barra
+ * ANTES de a rede ser usada — o sintoma vira "problema de rede", nunca "sem
+ * resultado". O manifest declara `optional_host_permissions` justamente para
+ * isto, mas permissao opcional nao vale nada enquanto ninguem a pede.
+ */
+const WEB_SEARCH_ORIGIN = 'https://api.duckduckgo.com/*';
+
+/** Consulta se a permissao de host ja foi concedida. Nao pede nada. */
+export async function hasWebSearchPermission(): Promise<boolean> {
+  return chrome.permissions.contains({ origins: [WEB_SEARCH_ORIGIN] });
+}
+
+/**
+ * Pede a permissao de host. Chame como PRIMEIRA operacao assincrona do clique:
+ * o Chrome recusa `permissions.request` fora do gesto do usuario, e qualquer
+ * `await` antes dele ja encerra o gesto.
+ */
+export async function requestWebSearchPermission(): Promise<boolean> {
+  return chrome.permissions.request({ origins: [WEB_SEARCH_ORIGIN] });
+}
+
 export class WebSearchError extends Error {
   constructor(message: string) {
     super(message);
@@ -80,7 +103,10 @@ export async function webSearch(query: string, signal?: AbortSignal): Promise<st
     response = await fetch(url, { headers: { Accept: 'application/json' }, signal });
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') throw error;
-    throw new WebSearchError('A busca na web falhou por problema de rede. Tente de novo.');
+    throw new WebSearchError(
+      'A busca na web falhou por problema de rede (ou falta de permissao de host ' +
+        'para api.duckduckgo.com). Tente de novo.',
+    );
   }
   if (!response.ok) {
     throw new WebSearchError(`A busca na web respondeu ${response.status}. Tente de novo.`);

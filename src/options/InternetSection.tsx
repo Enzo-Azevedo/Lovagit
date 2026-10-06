@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getSettings, saveSettings } from '../lib/storage';
+import { hasWebSearchPermission, requestWebSearchPermission } from '../lib/web/search';
 
 /**
  * Internet no agente (bloco 9).
@@ -7,15 +8,26 @@ import { getSettings, saveSettings } from '../lib/storage';
  * As opcoes ja viviam em `settings.internetAccess` desde a camada de dados; o
  * que faltava era a tela para liga-las — sem ela, a busca web existia no codigo
  * mas nao dava para ativar nem para restringir a duvida severa.
+ *
+ * A busca fala com `api.duckduckgo.com`, que nao esta no `host_permissions`
+ * fixo. Por isso ligar a opcao tambem pede a permissao de host — e esse pedido
+ * precisa ser a PRIMEIRA operacao assincrona do clique. Sem isso, toda busca
+ * falhava antes de sair da maquina.
  */
 export function InternetSection() {
   const [enabled, setEnabled] = useState(false);
   const [onlyWhenStuck, setOnlyWhenStuck] = useState(false);
+  /** Ligada mas sem permissao de host: toda busca falharia. */
+  const [semPermissao, setSemPermissao] = useState(false);
 
   const reload = useCallback(async () => {
     const settings = await getSettings();
     setEnabled(settings.internetAccess.enabled);
     setOnlyWhenStuck(settings.internetAccess.onlyWhenStuck);
+    // Uma instalacao anterior pode ter gravado `enabled` sem a permissao (ela
+    // nao era pedida). Nao da para pedir aqui — fora de um clique o Chrome
+    // recusa — entao so avisamos para o usuario re-marcar e autorizar.
+    setSemPermissao(settings.internetAccess.enabled && !(await hasWebSearchPermission()));
   }, []);
 
   useEffect(() => {
@@ -24,6 +36,16 @@ export function InternetSection() {
 
   const updateEnabled = useCallback(
     async (value: boolean) => {
+      if (value) {
+        // Primeira operacao assincrona do clique. Qualquer await antes deste
+        // pedido encerraria o gesto e o Chrome recusaria sem mostrar dialogo.
+        const granted = await requestWebSearchPermission();
+        if (!granted) {
+          setSemPermissao(true);
+          return;
+        }
+      }
+      setSemPermissao(false);
       setEnabled(value);
       await saveSettings({ internetAccess: { enabled: value, onlyWhenStuck } });
       await reload();
@@ -67,10 +89,18 @@ export function InternetSection() {
           Ligar busca na web
           <span className="mt-1 block text-[11px] text-ink-400">
             Desligada por padrao. Sem isto, a ferramenta <code>web_search</code> nem aparece no
-            prompt do agente.
+            prompt do agente. Ao ligar, o navegador pede permissao para acessar{' '}
+            <code>api.duckduckgo.com</code>.
           </span>
         </span>
       </label>
+
+      {semPermissao && (
+        <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-300">
+          Sem permissao para acessar <code>api.duckduckgo.com</code> — toda busca na web falharia.
+          Marque <strong>Ligar busca na web</strong> de novo para o navegador pedir a permissao.
+        </p>
+      )}
 
       <label
         className={`flex items-start gap-2 text-xs ${enabled ? 'text-ink-200' : 'text-ink-600'}`}

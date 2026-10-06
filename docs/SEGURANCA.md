@@ -21,8 +21,8 @@ BYOK que roda no cliente.
 
 - `host_permissions`: apenas `https://api.github.com/*`.
 - `optional_host_permissions`: `https://*/*`, pedido **sob demanda** quando você
-  salva a chave de um provedor — a extensão só alcança o domínio que você
-  autorizou naquele clique.
+  salva a chave de um provedor ou liga a busca na web — a extensão só alcança o
+  domínio que você autorizou naquele clique.
 - `identity`: exclusivamente para o fluxo OAuth (`launchWebAuthFlow`).
 - Sem `content_scripts`: a extensão não injeta código em página nenhuma.
 - CSP `script-src 'self'`: nenhum código remoto é carregado; tudo é bundle local.
