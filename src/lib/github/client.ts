@@ -1,4 +1,4 @@
-import { getSecret, SecretNames } from '../vault';
+import { getActiveGitHubPat } from '../vault';
 import type { RateLimitInfo, RepoRef, TreeEntry } from '../types';
 
 const API = 'https://api.github.com';
@@ -34,7 +34,7 @@ interface RequestOptions {
 }
 
 export async function githubRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const token = await getSecret(SecretNames.githubPat);
+  const token = await getActiveGitHubPat();
   if (!token) throw new GitHubError('Token do GitHub nao configurado', 401, path);
 
   const url = path.startsWith('http') ? path : `${API}${path}`;

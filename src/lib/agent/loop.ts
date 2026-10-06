@@ -21,7 +21,13 @@ import type { MemoryEntry } from '../memory/types';
 import type { RepoPlatformLink } from '../platforms/prompt';
 import type { NewMemoryEntry } from '../memory/store';
 import { extractRule } from '../memory/rules';
-import { buildToolSchemas, executeTool, indexBlobsByPath, type ToolRuntime } from './tools';
+import {
+  buildToolSchemas,
+  executeTool,
+  indexBlobsByPath,
+  type InternetPolicy,
+  type ToolRuntime,
+} from './tools';
 
 /** Teto de idas e voltas com o modelo em um unico turno do usuario. */
 const MAX_STEPS = 16;
@@ -79,6 +85,11 @@ export interface RunAgentOptions {
   memory: MemoryEntry[];
   /** Projetos de plataforma vinculados a ESTE repositorio (ja resolvidos). */
   platformLinks?: RepoPlatformLink[];
+  /**
+   * Internet no turno. `enabled` oferece `web_search` ao modelo; `onlyWhenStuck`
+   * exige justificativa de duvida severa, conferida na execucao (nao so no prompt).
+   */
+  internet?: InternetPolicy;
   /**
    * O que o modelo ja tinha gerado num turno anterior que caiu.
    *
@@ -143,6 +154,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
   const { scope, provider, onEvent } = options;
   const map = assertScopedMap(scope, options.map);
   const repoId = scope.repoId;
+  const internet = options.internet;
 
   const system = buildSystemPrompt(
     scope,
@@ -151,8 +163,9 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     options.mcpServers,
     options.memory,
     options.platformLinks ?? [],
+    internet,
   );
-  const tools = buildToolSchemas(options.mcpServers);
+  const tools = buildToolSchemas(options.mcpServers, internet);
   const produced: ChatMessage[] = [];
 
   const imagens = options.images ?? [];
@@ -209,6 +222,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     ref,
     pending,
     autoApply: options.autoApply,
+    internet,
     signal: options.signal,
     onPendingChanged: () => onEvent({ type: 'pending-changed', changes: [...pending.values()] }),
     onCommitted: async (result) => {

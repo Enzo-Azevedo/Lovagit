@@ -175,6 +175,13 @@ export type ProviderConfig =
   | OpenAICompatibleProviderConfig
   | OAuthProviderConfig;
 
+export interface GitHubAccount {
+  id: string;
+  /** Login da conta que o token autentica (ex.: "fulano-dev"). */
+  login: string;
+  avatarUrl: string;
+}
+
 export interface Settings {
   providers: ProviderConfig[];
   activeProviderId: string | null;
@@ -193,6 +200,19 @@ export interface Settings {
    */
   memoryBudgetBytes: number;
   githubUser?: { login: string; avatarUrl: string } | null;
+  /**
+   * Contas do GitHub cadastradas (um PAT por conta). A ativa e' a que responde
+   * pelas chamadas da API — trocar aqui muda quais repositorios aparecem.
+   */
+  githubAccounts: GitHubAccount[];
+  activeGitHubAccountId: string | null;
+  /**
+   * Internet no agente. `enabled` liga a ferramenta de busca web; `onlyWhenStuck`
+   * restringe essa busca a duvida severa (o modelo nao tem o conhecimento). A
+   * restricao e' instruida no prompt E travada na execucao — desobedecer o
+   * prompt nao basta para pesquisar a toa.
+   */
+  internetAccess: { enabled: boolean; onlyWhenStuck: boolean };
 }
 
 export interface RateLimitInfo {

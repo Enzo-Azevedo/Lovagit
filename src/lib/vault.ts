@@ -15,6 +15,8 @@ const SECRET_PREFIX = 'secret:';
 
 export const SecretNames = {
   githubPat: 'github_pat',
+  /** PAT de UMA conta GitHub cadastrada (multi-contas). */
+  githubPatAccount: (accountId: string) => `github_pat:${accountId}`,
   providerApiKey: (providerId: string) => `provider:${providerId}:api_key`,
   providerOAuth: (providerId: string) => `provider:${providerId}:oauth`,
   mcpOAuth: (serverId: string) => `mcp:${serverId}:oauth`,
@@ -154,4 +156,50 @@ export async function importSecrets(entries: Record<string, string>): Promise<nu
 export async function hasSecret(name: string): Promise<boolean> {
   const stored = await chrome.storage.local.get(SECRET_PREFIX + name);
   return Boolean(stored[SECRET_PREFIX + name]);
+}
+
+/**
+ * O PAT do GitHub com multi-contas.
+ *
+ * As contas cadastradas moram em `settings.githubAccounts`; o token de cada
+ * uma fica no cofre sob `github_pat:<id>`. Esta funcao resolve qual token vale
+ * AGORA: o da conta ativa. Um legado `github_pat` solto (instalacao anterior
+ * ao multi-contas) e' migrado de branco para a conta ativa na primeira
+ * leitura — ninguem perde o token por causa da atualizacao.
+ */
+export async function getActiveGitHubPat(): Promise<string | null> {
+  // Importacao dinamica: o cofre e' base para quase tudo, e storage aponta de
+  // volta para os tipos — puxar storage aqui no topo fecharia um ciclo.
+  const { getSettings } = await import('./storage');
+  const settings = await getSettings();
+  const ativa = settings.githubAccounts.find((conta) => conta.id === settings.activeGitHubAccountId);
+
+  if (ativa) {
+    const token = await getSecret(SecretNames.githubPatAccount(ativa.id));
+    if (token) return token;
+  }
+
+  // Migracao: o token de antes do multi-contas vira o da conta ativa (ou de
+  // uma conta "migrada" criada na hora). Apos copiar, o legado e' apagado —
+  // manter os dois criaria uma fonte de verdade ambigua.
+  const legado = await getSecret(SecretNames.githubPat);
+  if (!legado) return null;
+
+  const alvo =
+    ativa ??
+    settings.githubAccounts[0] ?? {
+      id: `migrada-${Date.now().toString(36)}`,
+      login: settings.githubUser?.login ?? 'conta migrada',
+      avatarUrl: settings.githubUser?.avatarUrl ?? '',
+    };
+  await setSecret(SecretNames.githubPatAccount(alvo.id), legado);
+  await deleteSecret(SecretNames.githubPat);
+
+  const { saveSettings } = await import('./storage');
+  const accounts = settings.githubAccounts.some((c) => c.id === alvo.id)
+    ? settings.githubAccounts
+    : [...settings.githubAccounts, alvo];
+  await saveSettings({ githubAccounts: accounts, activeGitHubAccountId: alvo.id });
+
+  return legado;
 }

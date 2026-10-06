@@ -6,15 +6,46 @@ import { renderPlatformSection, type RepoPlatformLink } from '../platforms/promp
 import type { McpServerConfig } from '../mcp/types';
 import type { RepoMap } from '../types';
 import type { RepoScope } from './isolation';
+import type { InternetPolicy } from './tools';
 
 function formatLanguages(languages: Record<string, number>): string {
   const total = Object.values(languages).reduce((sum, bytes) => sum + bytes, 0);
   if (total === 0) return 'nao detectadas';
   return Object.entries(languages)
-    .sort(([, a], [, b]) => b - a)
+    .sort(([, a], [b]) => b - a)
     .slice(0, 6)
     .map(([lang, bytes]) => `${lang} ${Math.round((bytes / total) * 100)}%`)
     .join(', ');
+}
+
+/**
+ * Secao de internet. So existe quando a ferramenta `web_search` foi oferecida
+ * ao modelo — anunciar uma capacidade sem a ferramenta faria o modelo prometer
+ * o que nao entrega. O tom endurece quando a busca e' restrita a duvida severa.
+ */
+function renderInternetSection(internet: InternetPolicy): string {
+  const linhas = [
+    '# Internet',
+    'Voce tem a ferramenta `web_search`, que pesquisa na web (DuckDuckGo).',
+  ];
+  if (internet.onlyWhenStuck) {
+    linhas.push(
+      '',
+      'REGRA DURO, aplicada pela extensao e nao so por este texto: use `web_search` SOMENTE',
+      'quando voce tem duvida severa — quando NAO tem o conhecimento exigido para responder',
+      'com seguranca. Toda chamada exige o campo `reason` explicando essa duvida concreta,',
+      'e a extensao RECUSA a busca se a justificativa for vazia ou generica. Pesquisar para',
+      'confirmar algo que voce ja sabe e' + "'" + ' desperdicio e sera barrado.',
+    );
+  } else {
+    linhas.push(
+      '',
+      'Use-a para fatos que nao estao neste repositorio e que voce nao tem como saber',
+      '(definicao de termo, sintaxe de biblioteca, versao atual de ferramenta). Para ler',
+      'este repositorio, prefira sempre `read_file`/`search_code` — sao mais precisos.',
+    );
+  }
+  return linhas.join('\n');
 }
 
 /**
@@ -28,6 +59,7 @@ export function buildSystemPrompt(
   mcpServers: McpServerConfig[] = [],
   memory: MemoryEntry[] = [],
   platformLinks: RepoPlatformLink[] = [],
+  internet?: InternetPolicy,
 ): string {
   // A memoria e' renderizada aqui dentro, a partir do mesmo escopo que o resto
   // do prompt: nao ha caminho por onde a memoria de outro repositorio entre.
@@ -154,7 +186,7 @@ gravar e' o momento em que a regra e' dita.
 O contrario tambem vale: pedido de hoje ("ajuste o header") nao e' regra e nao
 vai para a memoria. O trabalho feito ja fica registrado pelo proprio commit.
 
-${platformSection}
+${internet?.enabled ? renderInternetSection(internet) + '\n\n' : ''}${platformSection}
 ${memorySection}
 # Mapa do repositorio
 ${summarizeTree(map.entries)}

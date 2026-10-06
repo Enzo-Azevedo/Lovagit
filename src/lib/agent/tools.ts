@@ -7,11 +7,18 @@ import { parseNamespacedToolName } from '../mcp/protocol';
 import type { McpServerConfig } from '../mcp/types';
 import { describeEmptySearch, explainSearchError, validateSearchQuery } from './search';
 import { describeProblems, findChangeProblems, isGeneratedFile } from './validate';
+import { webSearch, WebSearchError } from '../web/search';
 import type { PendingFileChange, RepoMap, ToolCall, ToolResult, TreeEntry } from '../types';
 import type { ToolSchema } from '../ai/types';
 import { ContextIsolationError, type RepoScope } from './isolation';
 
 const MAX_READ_BYTES = 200_000;
+
+/** Politica de internet do agente, resolvida das configuracoes. */
+export interface InternetPolicy {
+  enabled: boolean;
+  onlyWhenStuck: boolean;
+}
 
 export const TOOL_SCHEMAS: ToolSchema[] = [
   {
@@ -138,11 +145,64 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
 ];
 
 /**
+ * Esquema da busca na web. So entra na lista do modelo quando a internet esta
+ * ligada — ferramenta que nao pode ser usada nao aparece nem no prompt.
+ *
+ * A descricao muda com a restricao: quando a busca e' so para duvida severa,
+ * o proprio contrato da ferramenta ja diz isso, antes de qualquer prompt.
+ */
+function webSearchSchema(onlyWhenStuck: boolean): ToolSchema {
+  const descricaoBase =
+    'Pesquisa na internet (DuckDuckGo) por um fato que NAO esta neste repositorio: ' +
+    'definicao de um termo, sintaxe de uma biblioteca, versao atual de uma ferramenta. ' +
+    'Nunca para ler este repositorio (para isso existem read_file/search_code) e nunca ' +
+    'para outro repositorio. Devolve um resumo de verbete, nao uma varredura completa da ' +
+    'web — pergunta muito recente ou obscura pode voltar vazia.';
+  const descricaoRestrita =
+    ' USO RESTRITO: so quando voce tem duvida severa — quando NAO tem o conhecimento ' +
+    'exigido para responder com seguranca. O campo `reason` passa a ser obrigatorio: ' +
+    'nele, explique a duvida concreta que a pesquisa resolve. Chamada sem justificativa ' +
+    'real e recusada pela extensao, nao pelo provedor.';
+
+  return {
+    name: 'web_search',
+    description: onlyWhenStuck ? descricaoBase + descricaoRestrita : descricaoBase,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Termo a pesquisar na web.' },
+        ...(onlyWhenStuck
+          ? {
+              reason: {
+                type: 'string',
+                description:
+                  'Obrigatorio: a duvida severa concreta — o que voce NAO sabe e do que ' +
+                  'precisa para responder. Justificativa vazia ou generica ("para ' +
+                  'confirmar") faz a extensao recusar a busca.',
+              },
+            }
+          : {}),
+      },
+      required: onlyWhenStuck ? ['query', 'reason'] : ['query'],
+      additionalProperties: false,
+    },
+  };
+}
+
+/**
  * Junta as tools nativas do agente com as dos servidores MCP habilitados para
  * ESTE repositorio. Servidor nao habilitado simplesmente nao existe no prompt.
+ * A `web_search` so aparece quando a internet esta ligada — e com o contrato
+ * de justificativa quando restrita a duvida severa.
  */
-export function buildToolSchemas(mcpServers: McpServerConfig[]): ToolSchema[] {
-  return [...TOOL_SCHEMAS, ...mcpToolSchemas(mcpServers)];
+export function buildToolSchemas(
+  mcpServers: McpServerConfig[],
+  internet?: InternetPolicy,
+): ToolSchema[] {
+  const base = internet?.enabled
+    ? [...TOOL_SCHEMAS, webSearchSchema(internet.onlyWhenStuck)]
+    : TOOL_SCHEMAS;
+  return [...base, ...mcpToolSchemas(mcpServers)];
 }
 
 /**
@@ -173,6 +233,8 @@ export interface ToolRuntime {
   ref: string;
   pending: Map<string, PendingFileChange>;
   autoApply: boolean;
+  /** Politica de internet deste turno. Ausente = internet desligada. */
+  internet?: InternetPolicy;
   signal?: AbortSignal;
   onPendingChanged: () => void;
   onCommitted: (result: ApplyResult) => Promise<void>;
@@ -204,6 +266,39 @@ export function describeTruncatedInput(input: Record<string, unknown>): string |
     'a resposta foi interrompida no meio da chamada. Nada foi executado. Refaca a ' +
     `chamada com os argumentos completos. Trecho recebido: ${cru.slice(0, 200)}`
   );
+}
+
+/**
+ * A TRAVA da internet restrita. O prompt pede e o contrato exige `reason`, mas
+ * nenhum dos dois impede um modelo teimoso — quem impede e' esta funcao.
+ *
+ * A justificativa precisa ser uma duvida CONCRETA, nao uma formalidade. Frase
+ * vazia, curta demais ou generica ("para confirmar", "verificar", "pesquisar")
+ * nao diz o que o modelo nao sabe — e sem isso nao ha como a busca ser "sob
+ * duvida severa". Recusar aqui e' o que torna a restricao real e nao cosmetica:
+ * um modelo que desobedece ao prompt esbarra nesta validacao, e a busca morre.
+ */
+const JUSTIFICATIVA_VAZIA =
+  /^\s*(para\s+)?(confirmar|verificar|checar|pesquisar|buscar|saber|consultar|garantir|ter certeza|certificar)[\s.!?]*$/i;
+const MIN_REASON_CHARS = 15;
+
+export function describeInvalidSearchReason(reason: string): string | null {
+  const limpa = reason.trim();
+  if (limpa.length < MIN_REASON_CHARS) {
+    return (
+      'Busca na web recusada: a restricao "sob duvida severa" exige que `reason` explique ' +
+      'o que voce NAO sabe e do que precisa para responder. Uma frase tao curta nao ' +
+      'descreve uma duvida concreta. Se voce ja tem o conhecimento, responda sem pesquisar.'
+    );
+  }
+  if (JUSTIFICATIVA_VAZIA.test(limpa)) {
+    return (
+      'Busca na web recusada: `reason` precisa nomear a duvida (ex.: "nao sei a sintaxe ' +
+      'atual do metodo X na versao Y"), nao uma intencao generica como "para confirmar". ' +
+      'Se voce ja tem o conhecimento exigido, responda sem pesquisar.'
+    );
+  }
+  return null;
 }
 
 function ok(call: ToolCall, content: string): ToolResult {
@@ -342,6 +437,28 @@ export async function executeTool(runtime: ToolRuntime, call: ToolCall): Promise
             .map((hit) => `${hit.path}\n${hit.fragments.map((f) => `  | ${f}`).join('\n')}`)
             .join('\n\n'),
         );
+      }
+
+      case 'web_search': {
+        // A ferramenta nem existe no prompt se a internet estiver desligada,
+        // mas defesa em profundidade: se uma chamada assim chegar, ela morre.
+        if (!runtime.internet?.enabled) {
+          return fail(
+            call,
+            'Busca na web desligada. O usuario nao liberou acesso a internet nesta extensao.',
+          );
+        }
+        if (runtime.internet.onlyWhenStuck) {
+          const problema = describeInvalidSearchReason(String(call.input.reason ?? ''));
+          if (problema) return fail(call, problema);
+        }
+        const query = String(call.input.query ?? '').trim();
+        try {
+          return ok(call, await webSearch(query, runtime.signal));
+        } catch (error) {
+          if (error instanceof WebSearchError) return fail(call, error.message);
+          throw error;
+        }
       }
 
       case 'write_file': {

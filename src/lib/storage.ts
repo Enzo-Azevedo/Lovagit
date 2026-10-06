@@ -52,6 +52,9 @@ export const DEFAULT_SETTINGS: Settings = {
   autoRetryOnFailure: false,
   memoryBudgetBytes: 1_073_741_824,
   githubUser: null,
+  githubAccounts: [],
+  activeGitHubAccountId: null,
+  internetAccess: { enabled: false, onlyWhenStuck: false },
 };
 
 async function readKey<T>(key: string, fallback: T): Promise<T> {
@@ -61,7 +64,14 @@ async function readKey<T>(key: string, fallback: T): Promise<T> {
 
 export async function getSettings(): Promise<Settings> {
   const stored = await readKey<Partial<Settings>>(keys.settings, {});
-  return { ...DEFAULT_SETTINGS, ...stored };
+  // `internetAccess` nasceu depois: um settings guardado antes dele nao tem o
+  // objeto, e espalhar o padrao raso deixaria `internetAccess` undefined —
+  // quebrando quem le `.enabled`. Os objetos aninhados ganham merge proprio.
+  return {
+    ...DEFAULT_SETTINGS,
+    ...stored,
+    internetAccess: { ...DEFAULT_SETTINGS.internetAccess, ...stored.internetAccess },
+  };
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
