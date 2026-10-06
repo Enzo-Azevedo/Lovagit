@@ -80,6 +80,8 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
   const [streaming, setStreaming] = useState('');
   /** Raciocinio do turno em andamento — some assim que a resposta chega. */
   const [reasoning, setReasoning] = useState('');
+  /** Plano listado pelo modelo no modo MAX STEPS dinamico. */
+  const [plan, setPlan] = useState<string | null>(null);
   /** Reenvio automatico agendado: texto original, segundos restantes e qual
    *  tentativa vem a seguir. Nao ha teto — o numero aparece na tela justamente
    *  para o usuario ver quanto ja insistiu e decidir se cancela. */
@@ -213,6 +215,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
     setPendingMessage('');
     setStreaming('');
     setReasoning('');
+    setPlan(null);
     setRetry(null);
     setMemory([]);
     setMemoryError(null);
@@ -291,6 +294,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
 
       setError(null);
       setReasoning('');
+      setPlan(null);
       setRunning(true);
       setStreaming('');
       const controller = new AbortController();
@@ -325,6 +329,9 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
               break;
             case 'reasoning-delta':
               setReasoning((prev) => prev + event.text);
+              break;
+            case 'plan':
+              setPlan(event.text);
               break;
             case 'message':
               setStreaming('');
@@ -380,6 +387,8 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           provider,
           autoApply: settings.autoApplyChanges,
           maxReasoningChars: settings.maxReasoningChars,
+          maxSteps: settings.maxSteps,
+          dynamicMaxSteps: settings.dynamicMaxSteps,
           connectedRepoIds: settings.connectedRepoIds,
           mcpServers,
           memory: memoriaAtual,
@@ -699,6 +708,17 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           if (message.role === 'tool') return null;
           return <AssistantStep key={message.id} message={message} results={toolResults} />;
         })}
+
+        {/* Plano do modo MAX STEPS dinamico: aparece antes do trabalho e fica
+            visivel durante o turno, para o usuario ver o que foi listado. */}
+        {plan && (
+          <div className="rounded-md border border-ink-800 bg-ink-900/60">
+            <p className="px-2 py-1 text-[10px] text-ink-500">Plano deste turno</p>
+            <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap border-t border-ink-800 p-2 font-mono text-[10px] leading-relaxed text-ink-400">
+              {plan}
+            </pre>
+          </div>
+        )}
 
         {/* Fase de pensamento: sem isso a tela fica parada em modelo lento, e e
             justamente nesse silencio que o intermediario derruba a conexao. */}

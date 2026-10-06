@@ -204,6 +204,20 @@ export interface Settings {
    * usa isso: o raciocinio nunca volta ao modelo. Configuravel nas opcoes.
    */
   maxReasoningChars: number;
+  /**
+   * Teto de passos do agente por turno (idas e voltas com o modelo). Cada passo
+   * pode ler, buscar, escrever ou commitar. Quando `dynamicMaxSteps` esta
+   * ligado, este valor vira so o piso de seguranca: o teto real e' calculado a
+   * partir do plano que o modelo lista antes de executar.
+   */
+  maxSteps: number;
+  /**
+   * MAX STEPS dinamico: antes de executar, o modelo lista tudo o que precisa
+   * fazer no turno e o teto passa a ser a quantidade de itens dessa lista + 1.
+   * O campo `maxSteps` deixa de valer (mas continua como piso se a lista nao
+   * puder ser contada).
+   */
+  dynamicMaxSteps: boolean;
   githubUser?: { login: string; avatarUrl: string } | null;
   /**
    * Contas do GitHub cadastradas (um PAT por conta). A ativa e' a que responde

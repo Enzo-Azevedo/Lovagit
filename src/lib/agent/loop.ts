@@ -29,8 +29,13 @@ import {
   type ToolRuntime,
 } from './tools';
 
-/** Teto de idas e voltas com o modelo em um unico turno do usuario. */
-const MAX_STEPS = 20;
+/**
+ * Teto padrao de idas e voltas com o modelo em um unico turno do usuario.
+ *
+ * Usado quando o usuario nao configura `maxSteps` e como piso de seguranca
+ * quando o MAX STEPS dinamico nao consegue contar um plano.
+ */
+export const DEFAULT_MAX_STEPS = 20;
 /** Mensagens de historico enviadas ao modelo (as mais recentes). */
 const HISTORY_WINDOW = 60;
 /**
@@ -39,6 +44,31 @@ const HISTORY_WINDOW = 60;
  * provedores recusam o campo de volta. Configuravel nas opcoes.
  */
 const DEFAULT_MAX_REASONING_CHARS = 32_000;
+
+/**
+ * Instrucao do plano no modo MAX STEPS dinamico. ASCII de proposito: vai para o
+ * modelo, nao para a tela.
+ */
+const PLAN_PROMPT = [
+  'Voce vai planejar este turno antes de executar.',
+  'Liste os passos que pretende executar, um por linha, como lista numerada.',
+  'Cada passo deve ser uma acao de ferramenta (ler, buscar, escrever, remover, commit).',
+  'Responda SOMENTE com a lista numerada, sem introducao e sem conclusao.',
+].join('\n');
+
+/**
+ * Conta os itens de uma lista de plano produzida pelo modelo.
+ *
+ * Aceita lista numerada (`1.`, `2)`) e marcadores (`-`, `*`, `+`, `•`). Linha
+ * que nao casa com o padrao de item nao conta: titulo, explicacao e conclusao
+ * nao sao passos.
+ */
+export function countPlanSteps(planText: string): number {
+  return planText
+    .split('\n')
+    .map((linha) => linha.trim())
+    .filter((linha) => /^(?:\d{1,3}[.)]|[-*+•])\s+/.test(linha)).length;
+}
 
 function trimReasoning(reasoning: string | undefined, limit: number): string | undefined {
   if (!reasoning) return undefined;
@@ -52,6 +82,8 @@ export type AgentEvent =
   | { type: 'assistant-delta'; text: string }
   /** Raciocinio chegando token a token, antes de o modelo produzir a resposta. */
   | { type: 'reasoning-delta'; text: string }
+  /** Plano listado pelo modelo no modo MAX STEPS dinamico. */
+  | { type: 'plan'; text: string }
   | { type: 'message'; message: ChatMessage }
   | { type: 'tool-start'; call: ToolCall }
   | { type: 'pending-changed'; changes: PendingFileChange[] }
@@ -94,6 +126,18 @@ export interface RunAgentOptions {
    * Teto do raciocinio guardado por passo (so exibicao). Ausente = padrao.
    */
   maxReasoningChars?: number;
+  /**
+   * Teto de passos deste turno. Padrao: `DEFAULT_MAX_STEPS`.
+   *
+   * Quando `dynamicMaxSteps` esta ligado, este valor vira piso de seguranca e o
+   * teto real vem do plano: o modelo lista as tarefas antes de comecar, e o
+   * turno ganha `itens do plano + 1` passos.
+   */
+  maxSteps?: number;
+  /**
+   * MAX STEPS dinamico. Veja `maxSteps`.
+   */
+  dynamicMaxSteps?: boolean;
   /**
    * O que o modelo ja tinha gerado num turno anterior que caiu.
    *
@@ -252,10 +296,45 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     },
   };
 
+  /**
+   * Teto do turno. No modo dinamico, o modelo lista o plano antes de executar e
+   * o teto vira o numero de itens + 1 — o +1 existe porque o proprio plano
+   * consome o passo zero do laco. Se o plano nao vier ou nao puder ser contado,
+   * vale o teto configurado (ou o padrao).
+   */
+  let maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
+  if (options.dynamicMaxSteps) {
+    onEvent({ type: 'status', text: 'Planejando os passos deste turno...' });
+    const planRequest = [
+      PLAN_PROMPT,
+      '',
+      `Pedido: ${options.userText}`,
+      ...(options.resumeHint ? ['', options.resumeHint] : []),
+    ].join('\n');
+    try {
+      const plano = await provider.complete({
+        system,
+        turns: [{ role: 'user', text: planRequest }],
+        tools: [],
+        signal: options.signal,
+      });
+      const texto = plano.text.trim();
+      if (texto) onEvent({ type: 'plan', text: texto });
+      const itens = countPlanSteps(texto);
+      if (itens > 0) maxSteps = itens + 1;
+    } catch (error) {
+      // Planejar e' otimizacao do teto, nao o trabalho em si: se o modelo nao
+      // devolver um plano, o turno segue com o teto configurado. Cancelamento
+      // nao e' falha de plano — sobe para encerrar o turno.
+      if ((error as Error)?.name === 'AbortError') throw error;
+    }
+    onEvent({ type: 'status', text: '' });
+  }
+
   /** O laco terminou por ter acabado as voltas, e nao porque o modelo parou. */
   let esgotouPassos = false;
 
-  for (let step = 0; step < MAX_STEPS; step++) {
+  for (let step = 0; step < maxSteps; step++) {
     if (options.signal?.aborted) throw new DOMException('Cancelado', 'AbortError');
 
     // Ultima barreira antes de a requisicao sair da maquina.
@@ -362,13 +441,13 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
     // Chegou ao fim do corpo na ultima volta: o modelo ainda queria continuar e
     // quem encerrou foi o teto. Marcado aqui, e nao depois do laco, porque so
     // neste ponto da para distinguir "acabaram as voltas" de "o modelo parou".
-    if (step === MAX_STEPS - 1) esgotouPassos = true;
+    if (step === maxSteps - 1) esgotouPassos = true;
   }
 
   // Sem isto, estourar o teto era o unico encerramento sem aviso nenhum: a
   // conversa parava e ficava igualzinha a um turno que terminou bem.
   if (esgotouPassos) {
-    onEvent({ type: 'error', error: explainStepCeiling(MAX_STEPS) });
+    onEvent({ type: 'error', error: explainStepCeiling(maxSteps) });
   }
 
   // O modelo mexeu em arquivos e encerrou sem chamar commit_changes. Sem

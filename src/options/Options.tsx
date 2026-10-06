@@ -62,6 +62,8 @@ export function Options() {
   const [message, setMessage] = useState<string | null>(null);
   /** Raciocinio em digitos crus; a mascara so aparece na renderizacao. */
   const [reasoningChars, setReasoningChars] = useState('32000');
+  /** MAX STEPS em digitos crus; a mascara so aparece na renderizacao. */
+  const [maxSteps, setMaxSteps] = useState('20');
 
   const reload = useCallback(async () => {
     // Garante que um token da era pre-multi-contas vire conta antes de ler a
@@ -71,6 +73,7 @@ export function Options() {
     const loaded = await getSettings();
     setSettings(loaded);
     setReasoningChars(String(loaded.maxReasoningChars));
+    setMaxSteps(String(loaded.maxSteps));
     const oauth: Record<string, string> = {};
     // A chave salva volta para o campo. Antes so um placeholder dizia que
     // existia uma, e nao dava para conferir se a que estava la era a certa —
@@ -241,6 +244,17 @@ export function Options() {
     await saveSettings({ maxReasoningChars: final });
     setReasoningChars(String(final));
   }, [reasoningChars]);
+
+  /** Salva o teto de passos. Campo vazio ou invalido volta ao padrao. */
+  const salvarMaxSteps = useCallback(async () => {
+    const digitos = maxSteps.replace(/\D/g, '');
+    const valor = digitos === '' ? 0 : Number(digitos);
+    const final = Number.isFinite(valor) && valor > 0
+      ? Math.round(valor)
+      : DEFAULT_SETTINGS.maxSteps;
+    await saveSettings({ maxSteps: final });
+    setMaxSteps(String(final));
+  }, [maxSteps]);
 
   if (!settings) return <div className="p-6 text-xs text-ink-400">Carregando...</div>;
 
@@ -593,6 +607,54 @@ export function Options() {
             >
               Salvar
             </button>
+          </span>
+        </label>
+      </section>
+
+      <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
+        <h2 className="text-sm text-ink-200">2.6. Passos máximos do agente (MAX STEPS)</h2>
+        <p className="text-xs text-ink-400">
+          Quantas idas e voltas com o modelo cabem em um turno antes de ele ser interrompido pelo
+          teto. Cada passo pode ler, buscar, escrever ou commitar. Tarefa que exige muita leitura
+          estoura aqui e o painel avisa para você pedir a continuação de onde parou.
+        </p>
+        <label className="block text-xs text-ink-200">
+          Passos máximos
+          <span className="mt-1 flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              disabled={settings.dynamicMaxSteps}
+              className="w-32 rounded-md border border-ink-700 bg-ink-950 px-2 py-1 text-xs text-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
+              value={formatarMilhar(maxSteps)}
+              onChange={(event) => setMaxSteps(event.target.value.replace(/\D/g, ''))}
+            />
+            <button
+              type="button"
+              disabled={settings.dynamicMaxSteps}
+              className="rounded-md border border-ink-700 px-2.5 py-1 text-xs text-ink-200 hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => void salvarMaxSteps()}
+            >
+              Salvar
+            </button>
+          </span>
+        </label>
+        <label className="flex items-start gap-2 text-xs text-ink-200">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={settings.dynamicMaxSteps}
+            onChange={(event) =>
+              void saveSettings({ dynamicMaxSteps: event.target.checked }).then(reload)
+            }
+          />
+          <span>
+            MAX STEPS dinâmico
+            <span className="mt-1 block text-[11px] text-ink-400">
+              Com esta opção ligada, o campo acima é desativado. Antes de executar, a IA lista
+              tudo o que precisa fazer no turno e o teto passa a ser a quantidade de passos dessa
+              lista mais 1. Se a lista não puder ser contada, vale o número configurado acima.
+            </span>
           </span>
         </label>
       </section>
