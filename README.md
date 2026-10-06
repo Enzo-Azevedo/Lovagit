@@ -186,9 +186,11 @@ antes de ler o arquivo aparece junto daquela leitura, não misturado com o
 pensamento inicial. Não é enfeite: em modelo lento, a fase de pensamento é
 justamente o trecho em que a tela fica parada e parece travada.
 
-O raciocínio é cortado em 4.000 caracteres por passo e **nunca é reenviado ao
+O raciocínio é cortado em 32.000 caracteres por passo e **nunca é reenviado ao
 modelo** — ele já sabe o que pensou, e devolver o campo dobraria o custo do
-histórico (alguns provedores chegam a recusá-lo de volta).
+histórico (alguns provedores chegam a recusá-lo de volta). O corte é só de
+exibição: o raciocínio guardado fica completo até o teto, e o que passar dele é
+marcado como truncado.
 
 ### Ações clicáveis
 
@@ -269,6 +271,40 @@ essa decisão é sua.
 > A permissão de host da origem do endpoint é solicitada no momento em que você
 > salva a chave/faz login (`optional_host_permissions`), então a extensão só
 > alcança os domínios que você autorizou.
+
+### Internet no agente (busca web gratuita)
+
+Desligada por padrão. Quando ligada, o agente ganha a ferramenta `web_search`,
+que pesquisa na web pelo **DuckDuckGo** — o endpoint de resposta instantânea,
+escolhido por ser o único caminho **gratuito que não exige chave nem conta**.
+A extensão não pode inventar credencial de API, e pedir uma chave só para
+pesquisar afastaria quem só quer a função ligada.
+
+O que a busca devolve é o **resumo do verbete** (o Abstract e os tópicos
+relacionados), não uma varredura completa da web. Pergunta muito recente ou
+obscura pode voltar vazia — é um limite da fonte, não um erro.
+
+**Para que serve.** Fatos que **não estão neste repositório** e que o modelo não
+tem como saber: a definição de um termo, a sintaxe de uma biblioteca, a versão
+atual de uma ferramenta. Para ler **este** repositório, `read_file` e
+`search_code` continuam sendo o caminho — são mais precisos e não saem da
+máquina.
+
+#### Restrita a dúvida severa (com trava dura)
+
+Ligando a opção "somente sob dúvida severa", a busca passa a exigir o campo
+`reason`, em que o modelo precisa explicar a **dúvida concreta** que a pesquisa
+resolve — o que ele **não** sabe e do que precisa para responder.
+
+Isso não é só um pedido no prompt. A restrição é **aplicada pela extensão na
+execução**: justificativa vazia, curta demais ou genérica ("para confirmar",
+"verificar", "pesquisar") faz a chamada ser **recusada** antes de sair, com uma
+mensagem que ensina o modelo a responder sem pesquisar. Um modelo que desobedece
+ao prompt esbarra nessa validação — pesquisar para confirmar o que ele já sabe é
+barrado, porque é desperdício.
+
+A internet do agente segue a mesma regra de isolamento de sempre: a busca é para
+fatos gerais, **nunca** para ler este repositório nem para alcançar outro.
 
 ### Memória por repositório
 
