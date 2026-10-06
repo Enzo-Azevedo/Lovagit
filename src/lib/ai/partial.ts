@@ -73,23 +73,23 @@ export function isWorthResuming(partial: PartialGeneration | undefined): boolean
 export function renderResumeHint(partial: PartialGeneration): string {
   const blocos: string[] = [
     '# Retomada de um turno interrompido',
-    'A tentativa anterior caiu antes de terminar. O que voce ja tinha produzido esta',
+    'A tentativa anterior caiu antes de terminar. O que você já tinha produzido está',
     'abaixo: aproveite e continue de onde parou, em vez de refazer do zero. Refazer',
-    'cobra de novo tokens que ja foram pagos.',
+    'cobra de novo tokens que já foram pagos.',
   ];
 
   if (partial.text.trim()) {
-    blocos.push('', '## Resposta ja escrita', cabeca(partial.text, LIMITE_TEXTO));
+    blocos.push('', '## Resposta já escrita', cabeca(partial.text, LIMITE_TEXTO));
   }
   if (partial.reasoning.trim()) {
-    blocos.push('', '## Para onde o raciocinio ia', cauda(partial.reasoning, LIMITE_RACIOCINIO));
+    blocos.push('', '## Para onde o raciocínio ia', cauda(partial.reasoning, LIMITE_RACIOCINIO));
   }
   if (partial.toolCalls.length > 0) {
     blocos.push(
       '',
       '## Ferramenta que ficou pela metade',
-      'O argumento abaixo esta CORTADO e nao foi executado. Refaca a chamada inteira;',
-      'isto serve so para voce saber onde tinha chegado.',
+      'O argumento abaixo está CORTADO e não foi executado. Refaça a chamada inteira;',
+      'isto serve só para você saber onde tinha chegado.',
       ...partial.toolCalls.map(
         (call) => `- \`${call.name}\`: ${cabeca(call.partialArguments, LIMITE_ARGUMENTO) || '(sem argumento ainda)'}`,
       ),

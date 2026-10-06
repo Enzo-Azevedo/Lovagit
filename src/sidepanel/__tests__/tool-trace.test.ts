@@ -34,7 +34,7 @@ describe('visibleResult', () => {
 
   it('explica quando a acao nao chegou a terminar', () => {
     // Acontece de verdade: a conexao cai entre a chamada e o resultado.
-    expect(visibleResult(undefined)).toContain('nao chegou a terminar');
+    expect(visibleResult(undefined)).toContain('não chegou a terminar');
   });
 });
 

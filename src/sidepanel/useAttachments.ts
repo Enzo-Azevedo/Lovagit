@@ -84,7 +84,7 @@ export function useAttachments() {
       const espaco = Math.max(0, MAX_IMAGES_PER_MESSAGE - attachments.length);
       const entram = aceitos.slice(0, espaco);
       if (aceitos.length > espaco) {
-        recusas.push(`Maximo de ${MAX_IMAGES_PER_MESSAGE} imagens por mensagem.`);
+        recusas.push(`Máximo de ${MAX_IMAGES_PER_MESSAGE} imagens por mensagem.`);
       }
 
       if (entram.length > 0) setAttachments((atuais) => [...atuais, ...entram]);

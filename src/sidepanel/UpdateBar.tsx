@@ -41,9 +41,9 @@ const APARENCIA: Record<
   atual: {
     faixa: 'border-emerald-500/25 text-emerald-300',
     botao: 'success',
-    rotulo: 'Versao atualizada',
+    rotulo: 'Versão atualizada',
     inerte: true,
-    descricao: () => 'voce esta na ultima versao publicada',
+    descricao: () => 'você está na última versão publicada',
   },
   desconhecida: {
     faixa: 'border-ink-700/60 text-ink-400',
@@ -118,7 +118,7 @@ export function UpdateBar() {
             disabled={aparencia.inerte}
             title={
               aparencia.inerte
-                ? 'Nada a baixar: o build publicado tem a mesma versao desta instalacao'
+                ? 'Nada a baixar: o build publicado tem a mesma versão desta instalação'
                 : `${build.name} · ${formatBytes(build.sizeBytes)} · publicado em ${new Date(
                     build.publishedAt,
                   ).toLocaleString('pt-BR')}`

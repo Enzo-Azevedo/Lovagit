@@ -96,8 +96,8 @@ describe('describeVision', () => {
   });
 
   it('e categorico no "nao" e cauteloso no "nao sei"', () => {
-    expect(describeVision('no', 'so-texto')).toContain('nao le imagens');
-    expect(describeVision('unknown', 'misterioso')).toContain('Nao da para confirmar');
+    expect(describeVision('no', 'so-texto')).toContain('não lê imagens');
+    expect(describeVision('unknown', 'misterioso')).toContain('Não dá para confirmar');
   });
 });
 
@@ -109,7 +109,7 @@ describe('rejectionReason', () => {
 
   it('recusa formato que nenhum provedor aceita', () => {
     const motivo = rejectionReason({ type: 'application/pdf', size: 100, name: 'doc.pdf' });
-    expect(motivo).toContain('nao suportado');
+    expect(motivo).toContain('não suportado');
   });
 
   it('recusa imagem grande demais', () => {

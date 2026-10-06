@@ -25,8 +25,8 @@ export function targetOfCall(input: Record<string, unknown>): string {
 
 /** Conteudo do resultado, cortado no teto de exibicao. */
 export function visibleResult(result: ToolResult | undefined): string {
-  if (!result) return 'Sem resultado — a acao nao chegou a terminar.';
+  if (!result) return 'Sem resultado — a ação não chegou a terminar.';
   if (result.content.length <= MAX_RESULT_CHARS) return result.content;
   const restante = result.content.length - MAX_RESULT_CHARS;
-  return `${result.content.slice(0, MAX_RESULT_CHARS)}\n\n... (${restante} caracteres a mais nao exibidos)`;
+  return `${result.content.slice(0, MAX_RESULT_CHARS)}\n\n... (${restante} caracteres a mais não exibidos)`;
 }

@@ -80,15 +80,15 @@ export async function detectVisionSupport(provider: ProviderConfig): Promise<Vis
 export function describeVision(support: VisionSupport, model: string): string | null {
   if (support === 'yes') return null;
   if (support === 'no') {
-    return `${model} nao le imagens. Troque de modelo ou remova o anexo.`;
+    return `${model} não lê imagens. Troque de modelo ou remova o anexo.`;
   }
-  return `Nao da para confirmar se ${model} le imagens; se ele ignorar o anexo, a resposta vem como se ele nao existisse.`;
+  return `Não dá para confirmar se ${model} lê imagens; se ele ignorar o anexo, a resposta vem como se ele não existisse.`;
 }
 
 /** Valida um arquivo antes de virar anexo. Devolve o motivo da recusa, ou null. */
 export function rejectionReason(file: { type: string; size: number; name: string }): string | null {
   if (!SUPPORTED_IMAGE_TYPES.includes(file.type)) {
-    return `${file.name}: formato ${file.type || 'desconhecido'} nao suportado (use PNG, JPEG, WebP ou GIF).`;
+    return `${file.name}: formato ${file.type || 'desconhecido'} não suportado (use PNG, JPEG, WebP ou GIF).`;
   }
   if (file.size > MAX_IMAGE_BYTES) {
     return `${file.name}: ${(file.size / (1024 * 1024)).toFixed(1)} MB passa do limite de 5 MB por imagem.`;

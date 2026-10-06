@@ -26,16 +26,16 @@ export function explainStopReason(stopReason: string): string | null {
 
   if (motivo === 'length' || motivo === 'max_tokens') {
     return (
-      'A resposta foi cortada pelo teto de tokens do provedor — o que esta acima esta ' +
-      'incompleto. Aumente o "Maximo de tokens" nas configuracoes do provedor, ou peca ' +
-      'a tarefa em partes menores. Em modelo com raciocinio o pensamento consome esse ' +
-      'mesmo teto, entao ele acaba antes do que se espera.'
+      'A resposta foi cortada pelo teto de tokens do provedor — o que está acima está ' +
+      'incompleto. Aumente o "Máximo de tokens" nas configurações do provedor, ou peça ' +
+      'a tarefa em partes menores. Em modelo com raciocínio o pensamento consome esse ' +
+      'mesmo teto, então ele acaba antes do que se espera.'
     );
   }
 
   if (motivo === 'content_filter') {
     return (
-      'O provedor bloqueou a resposta por filtro de conteudo. Reformule o pedido ou ' +
+      'O provedor bloqueou a resposta por filtro de conteúdo. Reformule o pedido ou ' +
       'use outro modelo.'
     );
   }
@@ -54,7 +54,7 @@ export function explainStopReason(stopReason: string): string | null {
 export function explainStepCeiling(maxSteps: number): string {
   return (
     `O turno atingiu o teto de ${maxSteps} passos de ferramenta e parou aqui — o modelo ` +
-    'nao tinha terminado. Isso acontece em tarefa que exige muita leitura. Peca para ' +
-    'continuar de onde parou, ou divida o pedido: o que ja foi lido e alterado continua valendo.'
+    'não tinha terminado. Isso acontece em tarefa que exige muita leitura. Peça para ' +
+    'continuar de onde parou, ou divida o pedido: o que já foi lido e alterado continua valendo.'
   );
 }
