@@ -44,7 +44,7 @@ function trimReasoning(reasoning: string | undefined, limit: number): string | u
   if (!reasoning) return undefined;
   return reasoning.length <= limit
     ? reasoning
-    : `${reasoning.slice(0, limit)}\n... (raciocinio truncado)`;
+    : `${reasoning.slice(0, limit)}\n... (raciocínio truncado)`;
 }
 
 export type AgentEvent =
@@ -266,7 +266,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       userAuthoredText,
     );
 
-    onEvent({ type: 'status', text: step === 0 ? 'Pensando...' : 'Analisando o repositorio...' });
+    onEvent({ type: 'status', text: step === 0 ? 'Pensando...' : 'Analisando o repositório...' });
 
     const response = await provider.complete({
       system,
@@ -289,7 +289,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       // no campo proprio, logo acima, entao aqui basta explicar o que houve.
       content:
         silentTurn && response.reasoning
-          ? '(o modelo nao produziu resposta final — o raciocinio dele esta acima)'
+          ? '(o modelo não produziu resposta final — o raciocínio dele está acima)'
           : response.text,
       reasoning: trimReasoning(response.reasoning, maxReasoningChars),
       toolCalls: response.toolCalls.length > 0 ? response.toolCalls : undefined,
@@ -311,7 +311,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       onEvent({
         type: 'error',
         error:
-          'A conexao caiu no meio da resposta. O que chegou esta acima; envie de novo para continuar.',
+          'A conexão caiu no meio da resposta. O que chegou está acima; envie de novo para continuar.',
       });
       break;
     }
@@ -328,10 +328,10 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
       onEvent({
         type: 'error',
         error: response.reasoning
-          ? 'O modelo devolveu apenas raciocinio, sem resposta final. Peca de novo, ou use ' +
-            'outro modelo — alguns modelos de raciocinio se perdem depois de varias rodadas de leitura.'
-          : 'O modelo encerrou o turno sem produzir resposta nem chamar ferramentas. Peca de novo, ' +
-            'seja mais especifico, ou tente outro modelo.',
+          ? 'O modelo devolveu apenas raciocínio, sem resposta final. Peça de novo, ou use ' +
+            'outro modelo — alguns modelos de raciocínio se perdem depois de várias rodadas de leitura.'
+          : 'O modelo encerrou o turno sem produzir resposta nem chamar ferramentas. Peça de novo, ' +
+            'seja mais específico, ou tente outro modelo.',
       });
       break;
     }

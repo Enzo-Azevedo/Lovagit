@@ -83,10 +83,10 @@ describe('turno vazio', () => {
     // lugar cronologico; o conteudo so explica por que nao veio resposta.
     const assistente = messages.find((message) => message.role === 'assistant');
     expect(assistente?.reasoning).toContain('preciso ler mais arquivos');
-    expect(assistente?.content).toContain('nao produziu resposta final');
+    expect(assistente?.content).toContain('não produziu resposta final');
 
     const erro = events.find((event) => event.type === 'error');
-    expect(erro && 'error' in erro && erro.error).toContain('apenas raciocinio');
+    expect(erro && 'error' in erro && erro.error).toContain('apenas raciocínio');
   });
 
   it('nao avisa nada quando o modelo responde normalmente', async () => {

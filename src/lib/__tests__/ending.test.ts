@@ -19,7 +19,7 @@ describe('explainStopReason', () => {
   it('`length` avisa que a resposta esta cortada, e diz o que ajustar', () => {
     const aviso = explainStopReason('length');
     expect(aviso).toContain('cortada');
-    expect(aviso).toContain('Maximo de tokens');
+    expect(aviso).toContain('Máximo de tokens');
   });
 
   it('explica que o raciocinio consome o mesmo teto', () => {
@@ -36,8 +36,8 @@ describe('explainStopReason', () => {
   it('filtro de conteudo tem aviso proprio', () => {
     // Causa diferente exige acao diferente: reformular, nao aumentar teto.
     const aviso = explainStopReason('content_filter');
-    expect(aviso).toContain('filtro de conteudo');
-    expect(aviso).not.toContain('Maximo de tokens');
+    expect(aviso).toContain('filtro de conteúdo');
+    expect(aviso).not.toContain('Máximo de tokens');
   });
 
   it('motivo desconhecido nao inventa explicacao', () => {
@@ -51,7 +51,7 @@ describe('explainStepCeiling', () => {
     // o pedido inteiro e pagar tudo de novo.
     const aviso = explainStepCeiling(16);
     expect(aviso).toContain('16 passos');
-    expect(aviso).toMatch(/nao tinha terminado/i);
+    expect(aviso).toMatch(/não tinha terminado/i);
     expect(aviso).toMatch(/continuar de onde parou/i);
   });
 
