@@ -211,7 +211,7 @@ export function buildToolSchemas(
  *
  * Antes, cada `read_file`/`write_file`/`delete_file` varria `map.entries`
  * inteiro procurando um caminho. Num repositorio com milhares de arquivos e ate
- * 16 passos por turno, era a mesma pergunta ("qual entrada tem este caminho?")
+ * 20 passos por turno, era a mesma pergunta ("qual entrada tem este caminho?")
  * respondida do zero toda vez. A relacao e' chave/valor; a estrutura passa a
  * ser a que representa isso.
  */

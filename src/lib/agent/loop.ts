@@ -30,7 +30,7 @@ import {
 } from './tools';
 
 /** Teto de idas e voltas com o modelo em um unico turno do usuario. */
-const MAX_STEPS = 16;
+const MAX_STEPS = 20;
 /** Mensagens de historico enviadas ao modelo (as mais recentes). */
 const HISTORY_WINDOW = 60;
 /**
