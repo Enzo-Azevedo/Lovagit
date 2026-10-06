@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getAuthenticatedUser } from '../lib/github/client';
+import { addGitHubAccount, removeGitHubAccount, setActiveGitHubAccount } from '../lib/github/accounts';
 import { getSettings, saveSettings } from '../lib/storage';
-import { deleteSecret, getSecret, hasSecret, SecretNames, setSecret } from '../lib/vault';
+import { deleteSecret, getActiveGitHubPat, getSecret, SecretNames, setSecret } from '../lib/vault';
 import { PROVIDER_PRESETS, providerFromPreset } from '../lib/ai/presets';
 import { validateProviderKey, type ValidationResult } from '../lib/ai/validate';
 import { providerOrigin } from '../lib/ai/registry';
@@ -39,7 +39,7 @@ export function Options() {
   useCursorGlow();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pat, setPat] = useState('');
-  const [patSaved, setPatSaved] = useState(false);
+  const [savingPat, setSavingPat] = useState(false);
   const [patStatus, setPatStatus] = useState<string | null>(null);
   // Separa "ja existe chave salva" (booleano) do rascunho digitado agora. Guardar
   // os dois no mesmo mapa faria o placeholder da chave salva ser gravado como chave.
@@ -54,9 +54,12 @@ export function Options() {
   const [message, setMessage] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
+    // Garante que um token da era pre-multi-contas vire conta antes de ler a
+    // lista — sem isto, a tela mostraria "nenhuma conta" para quem ja usava a
+    // extensao na versao anterior.
+    await getActiveGitHubPat();
     const loaded = await getSettings();
     setSettings(loaded);
-    setPatSaved(await hasSecret(SecretNames.githubPat));
     const oauth: Record<string, string> = {};
     // A chave salva volta para o campo. Antes so um placeholder dizia que
     // existia uma, e nao dava para conferir se a que estava la era a certa —
@@ -84,24 +87,37 @@ export function Options() {
   const saveToken = useCallback(async () => {
     const value = pat.trim();
     if (!value) return;
-    await setSecret(SecretNames.githubPat, value);
-    setPat('');
+    setSavingPat(true);
+    setPatStatus(null);
     try {
-      const user = await getAuthenticatedUser();
-      await saveSettings({ githubUser: { login: user.login, avatarUrl: user.avatarUrl } });
-      setPatStatus(`Conectado como ${user.login}`);
+      const account = await addGitHubAccount(value);
+      setPat('');
+      setPatStatus(`Conectado como ${account.login}`);
     } catch (error) {
       setPatStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingPat(false);
+      await reload();
     }
-    await reload();
   }, [pat, reload]);
 
-  const removeToken = useCallback(async () => {
-    await deleteSecret(SecretNames.githubPat);
-    await saveSettings({ githubUser: null });
-    setPatStatus(null);
-    await reload();
-  }, [reload]);
+  const selectAccount = useCallback(
+    async (accountId: string) => {
+      await setActiveGitHubAccount(accountId);
+      setPatStatus(null);
+      await reload();
+    },
+    [reload],
+  );
+
+  const removeAccount = useCallback(
+    async (accountId: string) => {
+      await removeGitHubAccount(accountId);
+      setPatStatus(null);
+      await reload();
+    },
+    [reload],
+  );
 
   const updateProvider = useCallback(
     async (id: string, patch: Partial<ProviderConfig>) => {
@@ -208,7 +224,9 @@ export function Options() {
 
   /** Nada configurado ainda: provavelmente uma instalacao recem-feita. */
   const instalacaoVazia =
-    !patSaved && settings.providers.length === 0 && settings.connectedRepoIds.length === 0;
+    settings.githubAccounts.length === 0 &&
+    settings.providers.length === 0 &&
+    settings.connectedRepoIds.length === 0;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
@@ -242,38 +260,77 @@ export function Options() {
 
       <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
         <h2 className="text-sm text-ink-200">1. GitHub</h2>
-        {patSaved ? (
-          <div className="flex items-center justify-between rounded-md border border-ink-700 bg-ink-950 px-3 py-2">
-            <span className="text-xs text-ink-200">
-              Token salvo
-              {settings.githubUser ? ` · ${settings.githubUser.login}` : ''}
-            </span>
-            <button className="text-xs text-red-300 hover:underline" onClick={() => void removeToken()}>
-              Remover
+
+        {settings.githubAccounts.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] text-ink-400">
+              Contas conectadas. A ativa responde pelas chamadas da API — trocar aqui muda quais
+              repositorios aparecem no painel.
+            </p>
+            {settings.githubAccounts.map((account) => (
+              <div
+                key={account.id}
+                className="flex items-center justify-between gap-2 rounded-md border border-ink-700 bg-ink-950 px-3 py-2"
+              >
+                <label className="flex min-w-0 items-center gap-2 text-xs text-ink-200">
+                  <input
+                    type="radio"
+                    name="active-github-account"
+                    className="mt-0.5 shrink-0"
+                    checked={settings.activeGitHubAccountId === account.id}
+                    onChange={() => void selectAccount(account.id)}
+                  />
+                  {account.avatarUrl ? (
+                    <img
+                      src={account.avatarUrl}
+                      alt=""
+                      className="h-5 w-5 shrink-0 rounded-full"
+                    />
+                  ) : (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ink-800 text-[10px] text-ink-400">
+                      {account.login.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                  <span className="truncate">{account.login}</span>
+                  {settings.activeGitHubAccountId === account.id && (
+                    <span className="shrink-0 rounded bg-ink-800 px-1 text-[10px] text-lov-orange">
+                      ativa
+                    </span>
+                  )}
+                </label>
+                <button
+                  className="shrink-0 text-xs text-red-300 hover:underline"
+                  onClick={() => void removeAccount(account.id)}
+                >
+                  Remover
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Field
+          label="Adicionar conta (Personal Access Token)"
+          hint="Fine-grained: permissoes Contents (read & write) e Metadata (read) nos repositorios desejados. Classico: escopo repo. O token e cifrado com AES-GCM antes de ir para o storage."
+        >
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={pat}
+              onChange={(event) => setPat(event.target.value)}
+              placeholder="github_pat_... ou ghp_..."
+              className={inputClass}
+            />
+            <button
+              className="rounded-md bg-gradient-to-r from-lov-orange to-lov-pink px-3 py-1.5 text-xs font-medium text-lov-ink disabled:opacity-40"
+              disabled={savingPat || !pat.trim()}
+              onClick={() => void saveToken()}
+            >
+              {savingPat ? 'Validando...' : 'Adicionar'}
             </button>
           </div>
-        ) : (
-          <Field
-            label="Personal Access Token"
-            hint="Fine-grained: permissoes Contents (read & write) e Metadata (read) nos repositorios desejados. Classico: escopo repo. O token e cifrado com AES-GCM antes de ir para o storage."
-          >
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={pat}
-                onChange={(event) => setPat(event.target.value)}
-                placeholder="github_pat_..."
-                className={inputClass}
-              />
-              <button
-                className="rounded-md bg-gradient-to-r from-lov-orange to-lov-pink px-3 py-1.5 text-xs font-medium text-lov-ink"
-                onClick={() => void saveToken()}
-              >
-                Salvar
-              </button>
-            </div>
-          </Field>
-        )}
+        </Field>
+
         {patStatus && <p className="text-[11px] text-ink-400">{patStatus}</p>}
       </section>
 

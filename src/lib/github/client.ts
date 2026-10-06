@@ -31,10 +31,15 @@ interface RequestOptions {
   cache?: boolean;
   accept?: string;
   signal?: AbortSignal;
+  /**
+   * PAT explicito. Sem ele, vale o da conta GitHub ativa — e' o caminho de
+   * quem valida um token recem-cadastrado sem depender da conta selecionada.
+   */
+  token?: string;
 }
 
 export async function githubRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const token = await getActiveGitHubPat();
+  const token = options.token ?? (await getActiveGitHubPat());
   if (!token) throw new GitHubError('Token do GitHub nao configurado', 401, path);
 
   const url = path.startsWith('http') ? path : `${API}${path}`;
@@ -95,10 +100,10 @@ export interface GitHubUser {
   name: string | null;
 }
 
-export async function getAuthenticatedUser(): Promise<GitHubUser> {
+export async function getAuthenticatedUser(token?: string): Promise<GitHubUser> {
   const user = await githubRequest<{ login: string; avatar_url: string; name: string | null }>(
     '/user',
-    { cache: false },
+    { cache: false, token },
   );
   return { login: user.login, avatarUrl: user.avatar_url, name: user.name };
 }

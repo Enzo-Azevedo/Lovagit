@@ -41,7 +41,11 @@ export function useRepos() {
 
   const refresh = useCallback(async () => {
     const settings = await getSettings();
-    const hasToken = await hasSecret(SecretNames.githubPat);
+    // Multi-contas: a presenca de QUALQUER conta ja significa token disponivel.
+    // O legado `github_pat` continua valendo aqui ate a migracao roda-lo para
+    // dentro de `githubAccounts` na primeira chamada a API.
+    const hasToken =
+      settings.githubAccounts.length > 0 || (await hasSecret(SecretNames.githubPat));
     const refs = await Promise.all(settings.connectedRepoIds.map((id) => getRepoRef(id)));
     setState((prev) => ({
       ...prev,
