@@ -383,6 +383,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           mcpServers,
           memory: memoriaAtual,
           platformLinks: vinculos,
+          internet: settings.internetAccess,
           resumeHint,
           signal: controller.signal,
           onEvent,

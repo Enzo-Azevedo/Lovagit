@@ -11,6 +11,7 @@ import type { ProviderConfig, Settings } from '../lib/types';
 import { useCursorGlow } from '../sidepanel/useCursorGlow';
 import { BackupSection } from './BackupSection';
 import { ConnectionsSection } from './ConnectionsSection';
+import { InternetSection } from './InternetSection';
 import { MemorySection } from './MemorySection';
 import { TelemetrySection } from './TelemetrySection';
 
@@ -602,6 +603,8 @@ export function Options() {
       <TelemetrySection />
 
       <BackupSection />
+
+      <InternetSection />
     </div>
   );
 }
