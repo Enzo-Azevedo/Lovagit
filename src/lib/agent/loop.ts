@@ -34,17 +34,17 @@ const MAX_STEPS = 16;
 /** Mensagens de historico enviadas ao modelo (as mais recentes). */
 const HISTORY_WINDOW = 60;
 /**
- * Teto do raciocinio guardado por passo. So a exibicao usa isso: o raciocinio
- * nunca volta ao modelo — ele ja sabe o que pensou, e alguns provedores
- * recusam o campo de volta.
+ * Teto padrao do raciocinio guardado por passo. So a exibicao usa isso: o
+ * raciocinio nunca volta ao modelo — ele ja sabe o que pensou, e alguns
+ * provedores recusam o campo de volta. Configuravel nas opcoes.
  */
-const MAX_REASONING_CHARS = 32_000;
+const DEFAULT_MAX_REASONING_CHARS = 32_000;
 
-function trimReasoning(reasoning: string | undefined): string | undefined {
+function trimReasoning(reasoning: string | undefined, limit: number): string | undefined {
   if (!reasoning) return undefined;
-  return reasoning.length <= MAX_REASONING_CHARS
+  return reasoning.length <= limit
     ? reasoning
-    : `${reasoning.slice(0, MAX_REASONING_CHARS)}\n... (raciocinio truncado)`;
+    : `${reasoning.slice(0, limit)}\n... (raciocinio truncado)`;
 }
 
 export type AgentEvent =
@@ -90,6 +90,10 @@ export interface RunAgentOptions {
    * exige justificativa de duvida severa, conferida na execucao (nao so no prompt).
    */
   internet?: InternetPolicy;
+  /**
+   * Teto do raciocinio guardado por passo (so exibicao). Ausente = padrao.
+   */
+  maxReasoningChars?: number;
   /**
    * O que o modelo ja tinha gerado num turno anterior que caiu.
    *
@@ -155,6 +159,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
   const map = assertScopedMap(scope, options.map);
   const repoId = scope.repoId;
   const internet = options.internet;
+  const maxReasoningChars = options.maxReasoningChars ?? DEFAULT_MAX_REASONING_CHARS;
 
   const system = buildSystemPrompt(
     scope,
@@ -286,7 +291,7 @@ export async function runAgent(options: RunAgentOptions): Promise<ChatMessage[]>
         silentTurn && response.reasoning
           ? '(o modelo nao produziu resposta final — o raciocinio dele esta acima)'
           : response.text,
-      reasoning: trimReasoning(response.reasoning),
+      reasoning: trimReasoning(response.reasoning, maxReasoningChars),
       toolCalls: response.toolCalls.length > 0 ? response.toolCalls : undefined,
       createdAt: Date.now(),
     };

@@ -379,6 +379,7 @@ export function ChatView({ repo, settings, onRequestSettings, onRemap }: ChatVie
           images: imagens,
           provider,
           autoApply: settings.autoApplyChanges,
+          maxReasoningChars: settings.maxReasoningChars,
           connectedRepoIds: settings.connectedRepoIds,
           mcpServers,
           memory: memoriaAtual,

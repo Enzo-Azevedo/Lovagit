@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { addGitHubAccount, removeGitHubAccount, setActiveGitHubAccount } from '../lib/github/accounts';
-import { getSettings, saveSettings } from '../lib/storage';
+import { DEFAULT_SETTINGS, getSettings, saveSettings } from '../lib/storage';
 import { deleteSecret, getActiveGitHubPat, getSecret, SecretNames, setSecret } from '../lib/vault';
 import { PROVIDER_PRESETS, providerFromPreset } from '../lib/ai/presets';
 import { validateProviderKey, type ValidationResult } from '../lib/ai/validate';
@@ -36,6 +36,13 @@ function Field({
 const inputClass =
   'w-full rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs text-ink-200 outline-none placeholder:text-ink-600 focus:border-ink-600';
 
+/** Separa os milhares no padrao brasileiro: "32000" -> "32.000". */
+function formatarMilhar(valor: string): string {
+  const digitos = valor.replace(/\D/g, '');
+  if (!digitos) return '';
+  return digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 export function Options() {
   useCursorGlow();
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -53,6 +60,8 @@ export function Options() {
   const [validatingId, setValidatingId] = useState<string | null>(null);
   const [oauthStatus, setOauthStatus] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
+  /** Raciocinio em digitos crus; a mascara so aparece na renderizacao. */
+  const [reasoningChars, setReasoningChars] = useState('32000');
 
   const reload = useCallback(async () => {
     // Garante que um token da era pre-multi-contas vire conta antes de ler a
@@ -61,6 +70,7 @@ export function Options() {
     await getActiveGitHubPat();
     const loaded = await getSettings();
     setSettings(loaded);
+    setReasoningChars(String(loaded.maxReasoningChars));
     const oauth: Record<string, string> = {};
     // A chave salva volta para o campo. Antes so um placeholder dizia que
     // existia uma, e nao dava para conferir se a que estava la era a certa —
@@ -220,6 +230,17 @@ export function Options() {
     },
     [reload],
   );
+
+  /** Salva o teto de raciocinio. Campo vazio ou invalido volta ao padrao. */
+  const salvarReasoningChars = useCallback(async () => {
+    const digitos = reasoningChars.replace(/\D/g, '');
+    const valor = digitos === '' ? 0 : Number(digitos);
+    const final = Number.isFinite(valor) && valor > 0
+      ? Math.round(valor)
+      : DEFAULT_SETTINGS.maxReasoningChars;
+    await saveSettings({ maxReasoningChars: final });
+    setReasoningChars(String(final));
+  }, [reasoningChars]);
 
   if (!settings) return <div className="p-6 text-xs text-ink-400">Carregando...</div>;
 
@@ -547,6 +568,33 @@ export function Options() {
             )}
           </div>
         ))}
+      </section>
+
+      <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">
+        <h2 className="text-sm text-ink-200">2.5. Caracteres maximos de raciocinio</h2>
+        <p className="text-xs text-ink-400">
+          Teto de caracteres do raciocinio exibido e guardado por passo, antes de ser marcado
+          como truncado. Vale so para a tela: o raciocinio nunca volta ao modelo.
+        </p>
+        <label className="block text-xs text-ink-200">
+          Caracteres maximos
+          <span className="mt-1 flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              className="w-32 rounded-md border border-ink-700 bg-ink-950 px-2 py-1 text-xs text-ink-100"
+              value={formatarMilhar(reasoningChars)}
+              onChange={(event) => setReasoningChars(event.target.value.replace(/\D/g, ''))}
+            />
+            <button
+              type="button"
+              className="rounded-md border border-ink-700 px-2.5 py-1 text-xs text-ink-200 hover:bg-ink-800"
+              onClick={() => void salvarReasoningChars()}
+            >
+              Salvar
+            </button>
+          </span>
+        </label>
       </section>
 
       <section className="glass space-y-3 rounded-lg border border-ink-700 bg-ink-900 p-4">

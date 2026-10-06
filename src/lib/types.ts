@@ -199,6 +199,11 @@ export interface Settings {
    * ocupar quase tudo; a compressao so entra quando o conjunto passa daqui.
    */
   memoryBudgetBytes: number;
+  /**
+   * Teto de caracteres do raciocinio exibido e guardado por passo. So a tela
+   * usa isso: o raciocinio nunca volta ao modelo. Configuravel nas opcoes.
+   */
+  maxReasoningChars: number;
   githubUser?: { login: string; avatarUrl: string } | null;
   /**
    * Contas do GitHub cadastradas (um PAT por conta). A ativa e' a que responde

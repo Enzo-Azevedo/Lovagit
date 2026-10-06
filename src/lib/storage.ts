@@ -51,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoApplyChanges: true,
   autoRetryOnFailure: false,
   memoryBudgetBytes: 1_073_741_824,
+  maxReasoningChars: 32_000,
   githubUser: null,
   githubAccounts: [],
   activeGitHubAccountId: null,
