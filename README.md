@@ -275,14 +275,21 @@ essa decisão é sua.
 ### Internet no agente (busca web gratuita)
 
 Desligada por padrão. Quando ligada, o agente ganha a ferramenta `web_search`,
-que pesquisa na web pelo **DuckDuckGo** — o endpoint de resposta instantânea,
-escolhido por ser o único caminho **gratuito que não exige chave nem conta**.
-A extensão não pode inventar credencial de API, e pedir uma chave só para
-pesquisar afastaria quem só quer a função ligada.
+que pesquisa na web pelo **DuckDuckGo** — o único caminho **gratuito que não
+exige chave nem conta**. A extensão não pode inventar credencial de API, e pedir
+uma chave só para pesquisar afastaria quem só quer a função ligada.
 
-O que a busca devolve é o **resumo do verbete** (o Abstract e os tópicos
-relacionados), não uma varredura completa da web. Pergunta muito recente ou
-obscura pode voltar vazia — é um limite da fonte, não um erro.
+A busca usa duas fontes, na mesma origem: primeiro a **resposta instantânea**
+(o Abstract/Answer, para "o que é X"); se ela vier vazia, os **resultados
+orgânicos** (título, trecho e link de cada página). O verbete sozinho voltava
+vazio para pergunta técnica sem página de enciclopédia — "qual o input
+`build-scan-terms-of-use-agree` da action `setup-gradle`?" é exatamente esse
+caso. Não é uma varredura completa da web: pergunta muito recente ou obscura
+ainda pode voltar vazia.
+
+Ao ligar, o navegador pede permissão para acessar `duckduckgo.com` (permissão de
+host opcional, solicitada no clique) — sem ela toda busca falharia antes de sair
+da máquina.
 
 **Para que serve.** Fatos que **não estão neste repositório** e que o modelo não
 tem como saber: a definição de um termo, a sintaxe de uma biblioteca, a versão

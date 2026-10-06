@@ -1,32 +1,36 @@
 /**
  * Busca na web para o agente.
  *
- * Fonte: o endpoint de "resposta instantanea" do DuckDuckGo
- * (`api.duckduckgo.com`). Escolhido por ser o unico caminho gratuito que nao
- * exige chave nem conta — a extensao nao pode inventar credencial de API, e
- * pedir uma chave so para pesquisar na internet afastaria quem so quer a
- * funcao ligada.
+ * Duas fontes, ambas gratuitas e sem chave nem conta:
  *
- * O que ele devolve e' o resumo do verbete (Abstract) mais topicos
- * relacionados: suficiente para "o que e' X", "qual a sintaxe de Y",
- * "a versao atual de Z". Nao e' um varredor completo da web — para perguntas
- * muito recentes ou obscuras ele volta vazio, e o agente e' avisado disso.
+ * 1. Resposta instantanea (`api.duckduckgo.com`): o Abstract/Answer e os
+ *    topicos relacionados. Boa para "o que e' X", "qual a sintaxe de Y".
+ *
+ * 2. Resultados organicos (`html.duckduckgo.com/html`): titulo, trecho e link
+ *    de cada resultado de busca. A resposta instantanea sozinha voltava vazia
+ *    para pergunta tecnica — "qual o input `build-scan-terms-of-use-agree` da
+ *    action setup-gradle?" nao tem pagina de enciclopedia, mas tem milhares de
+ *    paginas na web.
+ *
+ * Nenhuma das duas e' uma varredura completa da web: pergunta muito recente ou
+ * obscura ainda pode voltar vazia, e o agente e' avisado disso.
  */
 
-const ENDPOINT = 'https://api.duckduckgo.com/';
+const INSTANT_ENDPOINT = 'https://api.duckduckgo.com/';
+const RESULTS_ENDPOINT = 'https://html.duckduckgo.com/html/';
 
 /**
- * Origem que a busca usa. Precisa de permissao de host: sem ela, o fetch sai de
- * uma pagina de extensao como requisicao cross-origin comum e o navegador barra
- * ANTES de a rede ser usada — o sintoma vira "problema de rede", nunca "sem
- * resultado". O manifest declara `optional_host_permissions` justamente para
- * isto, mas permissao opcional nao vale nada enquanto ninguem a pede.
+ * Hosts que a busca alcanca. Precisam de permissao de host: sem ela, o fetch
+ * sai de uma pagina de extensao como requisicao cross-origin comum e o
+ * navegador barra ANTES de a rede ser usada — o sintoma vira "problema de
+ * rede", nunca "sem resultado". O `duckduckgo.com` entra porque o endpoint
+ * HTML pode redirecionar para a raiz do dominio.
  */
-const WEB_SEARCH_ORIGIN = 'https://api.duckduckgo.com/*';
+const WEB_SEARCH_ORIGINS = ['https://duckduckgo.com/*', 'https://*.duckduckgo.com/*'];
 
 /** Consulta se a permissao de host ja foi concedida. Nao pede nada. */
 export async function hasWebSearchPermission(): Promise<boolean> {
-  return chrome.permissions.contains({ origins: [WEB_SEARCH_ORIGIN] });
+  return chrome.permissions.contains({ origins: WEB_SEARCH_ORIGINS });
 }
 
 /**
@@ -35,7 +39,7 @@ export async function hasWebSearchPermission(): Promise<boolean> {
  * `await` antes dele ja encerra o gesto.
  */
 export async function requestWebSearchPermission(): Promise<boolean> {
-  return chrome.permissions.request({ origins: [WEB_SEARCH_ORIGIN] });
+  return chrome.permissions.request({ origins: WEB_SEARCH_ORIGINS });
 }
 
 export class WebSearchError extends Error {
@@ -45,12 +49,17 @@ export class WebSearchError extends Error {
   }
 }
 
-/** Pedaco de HTML -> texto. Os topicos do DDG trazem `<a>` e entidades. */
+function isAbort(error: unknown): boolean {
+  return (error as Error)?.name === 'AbortError';
+}
+
+/** Pedaco de HTML -> texto. O DDG traz `<a>`, `<b>` e entidades. */
 function stripHtml(value: string): string {
   return value
     .replace(/<[^>]*>/g, '')
     .replace(/&quot;/g, '"')
     .replace(/&#x27;|&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -88,37 +97,98 @@ function flattenTopics(topics: DdgTopic[], limite: number): { text: string; url:
 }
 
 /**
- * Pesquisa na web. Devolve texto pronto para entrar no resultado da ferramenta.
- * Lanca WebSearchError quando a rede falha — a camada do agente transforma em
- * resultado de erro, nunca em quebra do turno.
+ * Desembrulha um link de resultado do DuckDuckGo. Os `href` do HTML de busca
+ * sao redirecionamentos (`//duckduckgo.com/l/?uddg=<url real>`); o `uddg` e'
+ * quem guarda o destino. Link direto (sem `uddg`) passa como esta'.
  */
-export async function webSearch(query: string, signal?: AbortSignal): Promise<string> {
-  const limpa = query.trim();
-  if (!limpa) throw new WebSearchError('Informe um termo para pesquisar.');
-
-  const url = `${ENDPOINT}?q=${encodeURIComponent(limpa)}&format=json&no_html=1&skip_disambig=1`;
-
-  let response: Response;
+export function decodeDdgRedirect(href: string): string {
+  if (!href) return '';
+  const absoluta = href.startsWith('//') ? `https:${href}` : href;
   try {
-    response = await fetch(url, { headers: { Accept: 'application/json' }, signal });
-  } catch (error) {
-    if ((error as Error)?.name === 'AbortError') throw error;
-    throw new WebSearchError(
-      'A busca na web falhou por problema de rede (ou falta de permissao de host ' +
-        'para api.duckduckgo.com). Tente de novo.',
-    );
+    const url = new URL(absoluta);
+    const destino = url.searchParams.get('uddg');
+    if (destino) return destino.startsWith('//') ? `https:${destino}` : destino;
+    return url.toString();
+  } catch {
+    return '';
   }
+}
+
+export interface WebSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/**
+ * Extrai os resultados organicos do HTML de busca do DuckDuckGo.
+ *
+ * O DDG nao oferece JSON para os resultados de busca; o HTML e' o contrato.
+ * Em vez de `DOMParser` (que nao existe no service worker nem nos testes em
+ * Node), a extracao e' por regex em cima das classes estaveis `result__a`
+ * (titulo) e `result__snippet` (trecho). Se o markup mudar, o pior caso e' a
+ * busca voltar vazia — nunca quebrar o turno.
+ */
+export function parseDdgResults(html: string): WebSearchResult[] {
+  const links: { pos: number; title: string; url: string }[] = [];
+  const snippets: { pos: number; text: string }[] = [];
+
+  const tagRe = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = tagRe.exec(html))) {
+    const attrs = match[1];
+    const inner = match[2];
+    if (/\bclass="[^"]*\bresult__a\b/.test(attrs)) {
+      const href = /href="([^"]*)"/.exec(attrs)?.[1] ?? '';
+      const title = stripHtml(inner);
+      if (title && href) links.push({ pos: match.index, title, url: decodeDdgRedirect(href) });
+    } else if (/\bclass="[^"]*\bresult__snippet\b/.test(attrs)) {
+      const text = stripHtml(inner);
+      if (text) snippets.push({ pos: match.index, text });
+    }
+  }
+
+  // Titulo e trecho vivem em anchors separados; pareia pelo intervalo entre um
+  // titulo e o proximo (o trecho de um resultado vem logo depois do titulo).
+  return links
+    .map((link, index) => {
+      const proximo = links[index + 1]?.pos ?? html.length;
+      const snippet = snippets.find((s) => s.pos >= link.pos && s.pos < proximo);
+      return { title: link.title, url: link.url, snippet: snippet?.text ?? '' };
+    })
+    .filter((resultado) => resultado.title && resultado.url);
+}
+
+function limitarTrecho(texto: string, limite: number): string {
+  if (texto.length <= limite) return texto;
+  return `${texto.slice(0, limite).trimEnd()}...`;
+}
+
+function formatarResultados(resultados: WebSearchResult[]): string {
+  if (resultados.length === 0) return '';
+  const linhas = resultados.slice(0, 6).map((resultado) => {
+    const trecho = resultado.snippet
+      ? ` — ${limitarTrecho(resultado.snippet, 220)}`
+      : '';
+    return `- ${resultado.title}${trecho}\n  ${resultado.url}`;
+  });
+  return `Resultados da busca:\n${linhas.join('\n')}`;
+}
+
+async function fetchInstant(query: string, signal?: AbortSignal): Promise<DdgResponse> {
+  const url = `${INSTANT_ENDPOINT}?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+  const response = await fetch(url, { headers: { Accept: 'application/json' }, signal });
   if (!response.ok) {
-    throw new WebSearchError(`A busca na web respondeu ${response.status}. Tente de novo.`);
+    throw new WebSearchError(`A busca na web respondeu ${response.status}.`);
   }
-
-  let data: DdgResponse;
   try {
-    data = (await response.json()) as DdgResponse;
+    return (await response.json()) as DdgResponse;
   } catch {
     throw new WebSearchError('A resposta da busca na web nao veio em JSON legivel.');
   }
+}
 
+function instantParts(data: DdgResponse): string[] {
   const partes: string[] = [];
   const abstract = stripHtml(data.AbstractText ?? '');
   const answer = stripHtml(data.Answer ?? '');
@@ -136,13 +206,70 @@ export async function webSearch(query: string, signal?: AbortSignal): Promise<st
         .join('\n')}`,
     );
   }
+  return partes;
+}
+
+async function fetchOrganic(query: string, signal?: AbortSignal): Promise<WebSearchResult[]> {
+  const url = `${RESULTS_ENDPOINT}?q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: { Accept: 'text/html,application/xhtml+xml' },
+    signal,
+  });
+  if (!response.ok) {
+    throw new WebSearchError(`A busca na web respondeu ${response.status}.`);
+  }
+  try {
+    return parseDdgResults(await response.text());
+  } catch {
+    throw new WebSearchError('A resposta da busca na web nao veio em HTML legivel.');
+  }
+}
+
+/**
+ * Pesquisa na web. Devolve texto pronto para entrar no resultado da ferramenta.
+ *
+ * Verbete primeiro: quando a resposta instantanea tem conteudo, ela ja responde
+ * "o que e' X" melhor que uma lista de links. Vazia, a busca cai para os
+ * resultados organicos. Lanca WebSearchError apenas quando NENHUMA fonte
+ * respondeu (rede/permissoes) — resposta vazia de verdade vira um texto que
+ * orienta a reformular, nunca uma quebra do turno.
+ */
+export async function webSearch(query: string, signal?: AbortSignal): Promise<string> {
+  const limpa = query.trim();
+  if (!limpa) throw new WebSearchError('Informe um termo para pesquisar.');
+
+  const partes: string[] = [];
+  let algumaResposta = false;
+
+  try {
+    partes.push(...instantParts(await fetchInstant(limpa, signal)));
+    algumaResposta = true;
+  } catch (error) {
+    if (isAbort(error)) throw error;
+  }
 
   if (partes.length === 0) {
+    try {
+      const resultados = await fetchOrganic(limpa, signal);
+      algumaResposta = true;
+      const bloco = formatarResultados(resultados);
+      if (bloco) partes.push(bloco);
+    } catch (error) {
+      if (isAbort(error)) throw error;
+    }
+  }
+
+  if (partes.length === 0) {
+    if (!algumaResposta) {
+      throw new WebSearchError(
+        'A busca na web falhou por problema de rede (ou falta de permissao de host para o ' +
+          'DuckDuckGo). Tente de novo.',
+      );
+    }
     return (
-      `Nenhum resultado direto para "${limpa}". A busca usada (DuckDuckGo) devolve ` +
-      'resumos de verbetes, e nao uma varredura completa da web: para perguntas muito ' +
-      'recentes ou especificas ela pode nao ter resposta. Reformule o termo, ou siga ' +
-      'com o conhecimento que voce ja tem — e diga ao usuario que a pesquisa nao ajudou.'
+      `Nenhum resultado para "${limpa}" no DuckDuckGo. Pergunta muito recente ou ` +
+      'especifica demais pode nao ter resposta. Reformule o termo em menos palavras, ou ' +
+      'siga com o conhecimento que voce ja tem — e diga ao usuario que a pesquisa nao ajudou.'
     );
   }
   return partes.join('\n\n');

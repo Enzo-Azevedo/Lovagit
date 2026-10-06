@@ -9,10 +9,10 @@ import { hasWebSearchPermission, requestWebSearchPermission } from '../lib/web/s
  * que faltava era a tela para liga-las — sem ela, a busca web existia no codigo
  * mas nao dava para ativar nem para restringir a duvida severa.
  *
- * A busca fala com `api.duckduckgo.com`, que nao esta no `host_permissions`
- * fixo. Por isso ligar a opcao tambem pede a permissao de host — e esse pedido
- * precisa ser a PRIMEIRA operacao assincrona do clique. Sem isso, toda busca
- * falhava antes de sair da maquina.
+ * A busca fala com o DuckDuckGo (`api.duckduckgo.com` e `html.duckduckgo.com`),
+ * que nao esta no `host_permissions` fixo. Por isso ligar a opcao tambem pede a
+ * permissao de host — e esse pedido precisa ser a PRIMEIRA operacao assincrona
+ * do clique. Sem isso, toda busca falhava antes de sair da maquina.
  */
 export function InternetSection() {
   const [enabled, setEnabled] = useState(false);
@@ -67,9 +67,9 @@ export function InternetSection() {
       <h2 className="text-sm text-ink-200">9. Internet no agente</h2>
       <p className="text-xs text-ink-400">
         Ligando, o agente ganha a ferramenta <code>web_search</code>, que pesquisa na web pelo
-        DuckDuckGo — o unico caminho gratuito que nao exige chave nem conta. A busca devolve
-        resumo de verbete, nao uma varredura completa da web: pergunta muito recente ou obscura
-        pode voltar vazia.
+        DuckDuckGo — o unico caminho gratuito que nao exige chave nem conta. A busca devolve o
+        resumo do verbete (quando existe) e, quando nao, titulos, trechos e links de resultados.
+        Nao e uma varredura completa da web: pergunta muito recente ou obscura pode voltar vazia.
       </p>
       <p className="text-xs text-ink-400">
         Serve para fatos que <strong>nao estao neste repositorio</strong> e que o modelo nao tem
@@ -90,15 +90,15 @@ export function InternetSection() {
           <span className="mt-1 block text-[11px] text-ink-400">
             Desligada por padrao. Sem isto, a ferramenta <code>web_search</code> nem aparece no
             prompt do agente. Ao ligar, o navegador pede permissao para acessar{' '}
-            <code>api.duckduckgo.com</code>.
+            <code>duckduckgo.com</code>.
           </span>
         </span>
       </label>
 
       {semPermissao && (
         <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-300">
-          Sem permissao para acessar <code>api.duckduckgo.com</code> — toda busca na web falharia.
-          Marque <strong>Ligar busca na web</strong> de novo para o navegador pedir a permissao.
+          Sem permissao para acessar o DuckDuckGo — toda busca na web falharia. Marque{' '}
+          <strong>Ligar busca na web</strong> de novo para o navegador pedir a permissao.
         </p>
       )}
 

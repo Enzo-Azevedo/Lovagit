@@ -156,8 +156,9 @@ function webSearchSchema(onlyWhenStuck: boolean): ToolSchema {
     'Pesquisa na internet (DuckDuckGo) por um fato que NAO esta neste repositorio: ' +
     'definicao de um termo, sintaxe de uma biblioteca, versao atual de uma ferramenta. ' +
     'Nunca para ler este repositorio (para isso existem read_file/search_code) e nunca ' +
-    'para outro repositorio. Devolve um resumo de verbete, nao uma varredura completa da ' +
-    'web — pergunta muito recente ou obscura pode voltar vazia.';
+    'para outro repositorio. Devolve o verbete (quando existe) e, se nao, titulos, trechos ' +
+    'e links de resultados de busca. Nao e uma varredura completa da web — pergunta muito ' +
+    'recente ou obscura pode voltar vazia.';
   const descricaoRestrita =
     ' USO RESTRITO: so quando voce tem duvida severa — quando NAO tem o conhecimento ' +
     'exigido para responder com seguranca. O campo `reason` passa a ser obrigatorio: ' +
