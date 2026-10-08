@@ -81,3 +81,30 @@ export async function setActiveGitHubAccount(accountId: string): Promise<void> {
     githubUser: { login: account.login, avatarUrl: account.avatarUrl },
   });
 }
+
+/**
+ * Ativa a conta dona de um repositorio, a partir do `owner` (a parte antes da
+ * barra em "owner/name").
+ *
+ * E' o que o painel lateral chama quando a aba muda: a conta ativa precisa
+ * acompanhar o dono daquele repositorio — sem isso, a leitura do mapa
+ * (repositorio publico) funciona, mas a escrita volta 404, o sintoma de conta
+ * divergente da aba. GitHub login e' case-insensitive, entao a comparacao
+ * tambem e'.
+ *
+ * Repositorio de organizacao nao casa com login de conta nenhuma; nesse caso
+ * nada muda — nao ha como adivinhar qual token alcanca a org, e trocar para
+ * uma conta errada faria pior do que nao trocar.
+ */
+export async function activateAccountForRepoOwner(owner: string): Promise<void> {
+  const alvo = owner.trim().toLowerCase();
+  if (!alvo) return;
+
+  const settings = await getSettings();
+  const account = settings.githubAccounts.find(
+    (item) => item.login.toLowerCase() === alvo,
+  );
+  if (!account || settings.activeGitHubAccountId === account.id) return;
+
+  await setActiveGitHubAccount(account.id);
+}

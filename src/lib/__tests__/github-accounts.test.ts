@@ -48,9 +48,12 @@ const cliente = vi.hoisted(() => ({
 }));
 vi.mock('../github/client', () => cliente);
 
-const { addGitHubAccount, removeGitHubAccount, setActiveGitHubAccount } = await import(
-  '../github/accounts'
-);
+const {
+  addGitHubAccount,
+  removeGitHubAccount,
+  setActiveGitHubAccount,
+  activateAccountForRepoOwner,
+} = await import('../github/accounts');
 
 function usuario(login: string) {
   return { login, avatarUrl: `https://github.com/${login}.png`, name: null };
@@ -59,6 +62,7 @@ function usuario(login: string) {
 beforeEach(() => {
   cofre.dados.clear();
   cliente.getAuthenticatedUser.mockReset();
+  armazem.saveSettings.mockClear();
   armazem.definirSettings({ githubAccounts: [], activeGitHubAccountId: null, githubUser: null });
 });
 
@@ -170,6 +174,51 @@ describe('setActiveGitHubAccount', () => {
 
     await setActiveGitHubAccount('nao-existe');
 
+    expect(armazem.settings().activeGitHubAccountId).toBe('a');
+  });
+});
+
+describe('activateAccountForRepoOwner', () => {
+  it('ativa a conta cujo login casa com o owner do repositorio', async () => {
+    const a = { id: 'a', login: 'ana', avatarUrl: '' };
+    const b = { id: 'b', login: 'bia', avatarUrl: '' };
+    armazem.definirSettings({
+      githubAccounts: [a, b],
+      activeGitHubAccountId: 'a',
+      githubUser: { login: 'ana', avatarUrl: '' },
+    });
+
+    await activateAccountForRepoOwner('Bia');
+
+    expect(armazem.settings().activeGitHubAccountId).toBe('b');
+    expect(armazem.settings().githubUser).toEqual({ login: 'bia', avatarUrl: '' });
+  });
+
+  it('nao grava nada quando a conta do owner ja esta ativa', async () => {
+    const a = { id: 'a', login: 'ana', avatarUrl: '' };
+    armazem.definirSettings({
+      githubAccounts: [a],
+      activeGitHubAccountId: 'a',
+      githubUser: { login: 'ana', avatarUrl: '' },
+    });
+
+    await activateAccountForRepoOwner('ANA');
+
+    expect(armazem.saveSettings).not.toHaveBeenCalled();
+    expect(armazem.settings().activeGitHubAccountId).toBe('a');
+  });
+
+  it('nao mexe quando nenhum login casa (repositorio de organizacao)', async () => {
+    const a = { id: 'a', login: 'ana', avatarUrl: '' };
+    armazem.definirSettings({
+      githubAccounts: [a],
+      activeGitHubAccountId: 'a',
+      githubUser: { login: 'ana', avatarUrl: '' },
+    });
+
+    await activateAccountForRepoOwner('acme-corp');
+
+    expect(armazem.saveSettings).not.toHaveBeenCalled();
     expect(armazem.settings().activeGitHubAccountId).toBe('a');
   });
 });

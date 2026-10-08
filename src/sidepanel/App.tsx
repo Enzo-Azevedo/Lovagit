@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { activateAccountForRepoOwner } from '../lib/github/accounts';
 import { installErrorHandlers } from '../lib/telemetry/reporter';
 import { ChatView } from './ChatView';
 import { ErrorReportToast } from './ErrorReportToast';
@@ -25,6 +26,14 @@ export function App() {
   useEffect(() => {
     if (activeRepoId && state.repos.some((repo) => repo.id === activeRepoId)) return;
     setActiveRepoId(state.repos[0]?.id ?? null);
+  }, [activeRepoId, state.repos]);
+
+  // A conta ativa acompanha a aba: ao abrir um repositorio, a conta dona dele
+  // passa a ser a ativa nas configuracoes. Vale para a troca manual, para a
+  // selecao automatica da primeira aba e para o connect logo apos mapear.
+  useEffect(() => {
+    const repo = activeRepoId ? state.repos.find((item) => item.id === activeRepoId) : null;
+    if (repo) void activateAccountForRepoOwner(repo.owner);
   }, [activeRepoId, state.repos]);
 
   const activeRepo = state.repos.find((repo) => repo.id === activeRepoId) ?? null;
