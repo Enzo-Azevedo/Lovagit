@@ -171,22 +171,60 @@ export function withAttachmentNote(message: ChatMessage): string {
 [${anexos.length} imagem(ns) enviada(s) neste turno: ${lista} — nao estao mais visiveis]`;
 }
 
-/** Converte o historico persistido em turnos neutros de provedor. */
+/**
+ * Converte o historico persistido em turnos neutros de provedor.
+ *
+ * O historico pode carregar uma mensagem de assistente com `toolCalls` sem os
+ * resultados correspondentes: turno abortado (ou que caiu) entre a chamada de
+ * ferramenta e a execucao dela. Reenviar essa mensagem faz o provedor recusar o
+ * payload com 400 — "an assistant message with 'tool_calls' must be followed by
+ * tool messages responding to each 'tool_call_id'". Por isso a conversao
+ * sanitiza: assistant com tool calls sem TODOS os resultados entra so com o
+ * texto (se houver), e as mensagens de tool que responderiam a ela sao
+ * descartadas junto — sem a assistant, elas tambem seriam resultados orfaos.
+ */
 export function historyToTurns(history: ChatMessage[]): ProviderTurn[] {
   const window = history.slice(-HISTORY_WINDOW);
   // Nunca comecar por um resultado de tool orfao: o modelo rejeita.
   while (window.length > 0 && window[0].role !== 'user') window.shift();
 
   const turns: ProviderTurn[] = [];
-  for (const message of window) {
+  for (let i = 0; i < window.length; i++) {
+    const message = window[i];
+
+    if (message.role === 'assistant') {
+      const toolCalls = message.toolCalls ?? [];
+      if (toolCalls.length > 0) {
+        // Assistant com tool calls exige resposta para TODOS os ids nas
+        // mensagens `tool` imediatamente seguintes.
+        const pendentes = new Set(toolCalls.map((call) => call.id));
+        let j = i + 1;
+        while (j < window.length && window[j].role === 'tool') {
+          for (const result of window[j].toolResults ?? []) pendentes.delete(result.toolCallId);
+          j++;
+        }
+        if (pendentes.size === 0) {
+          turns.push({
+            role: 'assistant',
+            text: message.content || undefined,
+            toolCalls,
+          });
+          continue;
+        }
+        // Orfa (ou parcial): os tool calls nao podem ir, e os resultados que
+        // responderiam a eles tambem nao. Sobra so o texto, se houver.
+        if (message.content) {
+          turns.push({ role: 'assistant', text: message.content });
+        }
+        i = j - 1; // pula as mensagens tool consumidas acima
+        continue;
+      }
+      turns.push({ role: 'assistant', text: message.content || undefined });
+      continue;
+    }
+
     if (message.role === 'user') {
       turns.push({ role: 'user', text: withAttachmentNote(message) });
-    } else if (message.role === 'assistant') {
-      turns.push({
-        role: 'assistant',
-        text: message.content || undefined,
-        toolCalls: message.toolCalls,
-      });
     } else if (message.role === 'tool') {
       turns.push({ role: 'user', toolResults: message.toolResults });
     }
