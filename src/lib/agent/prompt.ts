@@ -27,6 +27,9 @@ function renderInternetSection(internet: InternetPolicy): string {
   const linhas = [
     '# Internet',
     'Voce tem a ferramenta `web_search`, que pesquisa na web (DuckDuckGo).',
+    '',
+    'Escreva o termo em linguagem natural, em poucas palavras e SEM aspas: frase exata',
+    'entre aspas costuma voltar vazia no DuckDuckGo.',
   ];
   if (internet.onlyWhenStuck) {
     linhas.push(

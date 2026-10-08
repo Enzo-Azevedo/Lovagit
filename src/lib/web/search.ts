@@ -1,30 +1,37 @@
 /**
  * Busca na web para o agente.
  *
- * Duas fontes, ambas gratuitas e sem chave nem conta:
+ * Tres fontes, todas gratuitas e sem chave nem conta:
  *
  * 1. Resposta instantanea (`api.duckduckgo.com`): o Abstract/Answer e os
  *    topicos relacionados. Boa para "o que e' X", "qual a sintaxe de Y".
  *
- * 2. Resultados organicos (`html.duckduckgo.com/html`): titulo, trecho e link
- *    de cada resultado de busca. A resposta instantanea sozinha voltava vazia
- *    para pergunta tecnica — "qual o input `build-scan-terms-of-use-agree` da
- *    action setup-gradle?" nao tem pagina de enciclopedia, mas tem milhares de
- *    paginas na web.
+ * 2. Resultados organicos (`html.duckduckgo.com/html`, GET e POST): titulo,
+ *    trecho e link de cada resultado de busca. A resposta instantanea sozinha
+ *    voltava vazia para pergunta tecnica — "qual o input X da action Y?" nao
+ *    tem pagina de enciclopedia, mas tem milhares de paginas na web. O GET
+ *    passou a devolver pagina de desafio em algumas consultas; o POST e'
+ *    tentado em seguida como primeira alternativa.
  *
- * Nenhuma das duas e' uma varredura completa da web: pergunta muito recente ou
+ * 3. Versao lite (`lite.duckduckgo.com/lite`): HTML mais pobre, feito para
+ *    navegador sem JavaScript — por isso menos protegido. E' a ultima cartada
+ *    quando o endpoint HTML principal devolve desafio ou markup que mudou.
+ *
+ * Nenhuma delas e' uma varredura completa da web: pergunta muito recente ou
  * obscura ainda pode voltar vazia, e o agente e' avisado disso.
  */
 
 const INSTANT_ENDPOINT = 'https://api.duckduckgo.com/';
 const RESULTS_ENDPOINT = 'https://html.duckduckgo.com/html/';
+const LITE_ENDPOINT = 'https://lite.duckduckgo.com/lite/';
 
 /**
  * Hosts que a busca alcanca. Precisam de permissao de host: sem ela, o fetch
  * sai de uma pagina de extensao como requisicao cross-origin comum e o
  * navegador barra ANTES de a rede ser usada — o sintoma vira "problema de
- * rede", nunca "sem resultado". O `duckduckgo.com` entra porque o endpoint
- * HTML pode redirecionar para a raiz do dominio.
+ * rede", nunca "sem resultado". O `duckduckgo.com` entra porque os endpoints
+ * HTML/lite podem redirecionar para a raiz do dominio, e o subdominio lite
+ * cai no coringa `*.duckduckgo.com`.
  */
 const WEB_SEARCH_ORIGINS = ['https://duckduckgo.com/*', 'https://*.duckduckgo.com/*'];
 
@@ -114,6 +121,20 @@ export function decodeDdgRedirect(href: string): string {
   }
 }
 
+/**
+ * Link do proprio DuckDuckGo? Nav, paginacao e sugestoes nao sao resultado.
+ * A versao lite mistura resultados externos com links internos; so os externos
+ * interessam ao agente.
+ */
+function isInternalDdg(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return host === 'duckduckgo.com' || host.endsWith('.duckduckgo.com');
+  } catch {
+    return true;
+  }
+}
+
 export interface WebSearchResult {
   title: string;
   url: string;
@@ -157,6 +178,34 @@ export function parseDdgResults(html: string): WebSearchResult[] {
       return { title: link.title, url: link.url, snippet: snippet?.text ?? '' };
     })
     .filter((resultado) => resultado.title && resultado.url);
+}
+
+/**
+ * Extrai os resultados da versao lite do DuckDuckGo.
+ *
+ * O markup lite e' mais pobre que o do endpoint HTML principal: o titulo nao
+ * carrega `class="result__a"` — e' um `<a rel="nofollow">` comum apontando para
+ * o redirecionamento `uddg`. Em vez de depender de classe que muda, usa o que
+ * nao muda: link de resultado externo (destino fora do duckduckgo.com). O
+ * trecho fica de fora de proposito — titulo + link ja tiram a busca do vazio.
+ */
+export function parseLiteResults(html: string): WebSearchResult[] {
+  const resultados: WebSearchResult[] = [];
+  const vistos = new Set<string>();
+
+  const tagRe = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = tagRe.exec(html))) {
+    const href = /href="([^"]*)"/.exec(match[1])?.[1] ?? '';
+    const title = stripHtml(match[2]);
+    if (!title || !href) continue;
+    const destino = decodeDdgRedirect(href);
+    if (!destino || isInternalDdg(destino)) continue;
+    if (vistos.has(destino)) continue;
+    vistos.add(destino);
+    resultados.push({ title, url: destino, snippet: '' });
+  }
+  return resultados;
 }
 
 function limitarTrecho(texto: string, limite: number): string {
@@ -209,20 +258,55 @@ function instantParts(data: DdgResponse): string[] {
   return partes;
 }
 
+/** HTML de resultados em texto, ou erro traduzido. Lanca WebSearchError. */
+async function htmlParaResultados(
+  response: Response,
+  parser: (html: string) => WebSearchResult[],
+): Promise<WebSearchResult[]> {
+  if (!response.ok) {
+    throw new WebSearchError(`A busca na web respondeu ${response.status}.`);
+  }
+  try {
+    return parser(await response.text());
+  } catch {
+    throw new WebSearchError('A resposta da busca na web nao veio em HTML legivel.');
+  }
+}
+
 async function fetchOrganic(query: string, signal?: AbortSignal): Promise<WebSearchResult[]> {
   const url = `${RESULTS_ENDPOINT}?q=${encodeURIComponent(query)}`;
   const response = await fetch(url, {
     headers: { Accept: 'text/html,application/xhtml+xml' },
     signal,
   });
-  if (!response.ok) {
-    throw new WebSearchError(`A busca na web respondeu ${response.status}.`);
-  }
-  try {
-    return parseDdgResults(await response.text());
-  } catch {
-    throw new WebSearchError('A resposta da busca na web nao veio em HTML legivel.');
-  }
+  return htmlParaResultados(response, parseDdgResults);
+}
+
+/**
+ * Mesmo endpoint HTML, mas por POST. O DuckDuckGo ja devolveu pagina de desafio
+ * para GET; o formulario real do endpoint e' POST, entao a chance de resposta
+ * util e' maior. Custa uma requisicao a mais e so entra quando o GET falha.
+ */
+async function fetchOrganicPost(query: string, signal?: AbortSignal): Promise<WebSearchResult[]> {
+  const response = await fetch(RESULTS_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      Accept: 'text/html,application/xhtml+xml',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({ q: query }).toString(),
+    signal,
+  });
+  return htmlParaResultados(response, parseDdgResults);
+}
+
+async function fetchLite(query: string, signal?: AbortSignal): Promise<WebSearchResult[]> {
+  const url = `${LITE_ENDPOINT}?q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: { Accept: 'text/html,application/xhtml+xml' },
+    signal,
+  });
+  return htmlParaResultados(response, parseLiteResults);
 }
 
 /**
@@ -230,7 +314,8 @@ async function fetchOrganic(query: string, signal?: AbortSignal): Promise<WebSea
  *
  * Verbete primeiro: quando a resposta instantanea tem conteudo, ela ja responde
  * "o que e' X" melhor que uma lista de links. Vazia, a busca cai para os
- * resultados organicos. Lanca WebSearchError apenas quando NENHUMA fonte
+ * resultados organicos em cascata (GET, POST e lite) e para na primeira que
+ * devolver resultado legivel. Lanca WebSearchError apenas quando NENHUMA fonte
  * respondeu (rede/permissoes) — resposta vazia de verdade vira um texto que
  * orienta a reformular, nunca uma quebra do turno.
  */
@@ -239,36 +324,49 @@ export async function webSearch(query: string, signal?: AbortSignal): Promise<st
   if (!limpa) throw new WebSearchError('Informe um termo para pesquisar.');
 
   const partes: string[] = [];
-  let algumaResposta = false;
+  // Alguma fonte COMPLETOU a requisicao (mesmo que vazia)? Distingue "nao tem
+  // resultado" de "nem chegou a rede" — so o segundo e' erro de verdade.
+  let algumaFonteRespondeu = false;
 
   try {
     partes.push(...instantParts(await fetchInstant(limpa, signal)));
-    algumaResposta = true;
+    algumaFonteRespondeu = true;
   } catch (error) {
     if (isAbort(error)) throw error;
   }
 
   if (partes.length === 0) {
-    try {
-      const resultados = await fetchOrganic(limpa, signal);
-      algumaResposta = true;
-      const bloco = formatarResultados(resultados);
-      if (bloco) partes.push(bloco);
-    } catch (error) {
-      if (isAbort(error)) throw error;
+    const fontes: Array<() => Promise<WebSearchResult[]>> = [
+      () => fetchOrganic(limpa, signal),
+      () => fetchOrganicPost(limpa, signal),
+      () => fetchLite(limpa, signal),
+    ];
+    for (const buscar of fontes) {
+      try {
+        const resultados = await buscar();
+        algumaFonteRespondeu = true;
+        const bloco = formatarResultados(resultados);
+        if (bloco) {
+          partes.push(bloco);
+          break;
+        }
+      } catch (error) {
+        if (isAbort(error)) throw error;
+      }
     }
   }
 
   if (partes.length === 0) {
-    if (!algumaResposta) {
+    if (!algumaFonteRespondeu) {
       throw new WebSearchError(
         'A busca na web falhou por problema de rede (ou falta de permissao de host para o ' +
           'DuckDuckGo). Tente de novo.',
       );
     }
     return (
-      `Nenhum resultado para "${limpa}" no DuckDuckGo. Pergunta muito recente ou ` +
-      'especifica demais pode nao ter resposta. Reformule o termo em menos palavras, ou ' +
+      `Nenhum resultado legivel para "${limpa}" no DuckDuckGo. Isso pode ser ausencia real ` +
+      'de resposta (termo muito recente ou especifico) ou a busca ter sido bloqueada. ' +
+      'Reformule em poucas palavras, em linguagem natural e SEM aspas; se continuar vazio, ' +
       'siga com o conhecimento que voce ja tem — e diga ao usuario que a pesquisa nao ajudou.'
     );
   }

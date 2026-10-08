@@ -155,6 +155,8 @@ function webSearchSchema(onlyWhenStuck: boolean): ToolSchema {
   const descricaoBase =
     'Pesquisa na internet (DuckDuckGo) por um fato que NAO esta neste repositorio: ' +
     'definicao de um termo, sintaxe de uma biblioteca, versao atual de uma ferramenta. ' +
+    'Escreva o termo em linguagem natural, em poucas palavras e SEM aspas: frase exata ' +
+    'entre aspas costuma voltar vazia no DuckDuckGo. ' +
     'Nunca para ler este repositorio (para isso existem read_file/search_code) e nunca ' +
     'para outro repositorio. Devolve o verbete (quando existe) e, se nao, titulos, trechos ' +
     'e links de resultados de busca. Nao e uma varredura completa da web — pergunta muito ' +

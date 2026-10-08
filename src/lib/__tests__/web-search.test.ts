@@ -3,6 +3,7 @@ import {
   WebSearchError,
   decodeDdgRedirect,
   parseDdgResults,
+  parseLiteResults,
   webSearch,
 } from '../web/search';
 
@@ -11,6 +12,10 @@ import {
  * verbete. Para pergunta tecnica ("qual o input X da action Y?") ela voltava
  * vazia — nao por falta de resposta na web, mas por nao consultar os resultados
  * de busca. A correcao adiciona os resultados organicos como fallback.
+ *
+ * O fallback tambem se provou fragil: o endpoint HTML por GET passou a devolver
+ * pagina de desafio (ou markup que mudou), e a busca caia de novo no vazio. Por
+ * isso a cascata hoje e': GET, POST e, por fim, a versao lite — menos protegida.
  */
 
 const HTML_RESULTADOS = `
@@ -29,6 +34,26 @@ const HTML_RESULTADOS = `
   <a class="result__snippet" href="https://docs.github.com/en/actions">Automate, customize, and execute your workflows.</a>
 </div>
 <nav><a class="nav-link" href="https://duckduckgo.com/about">Sobre</a></nav>
+`;
+
+const LITE_RESULTADOS = `
+<table class="results">
+  <tr>
+    <td valign="top">1.&nbsp;</td>
+    <td>
+      <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fscans.gradle.com">Gradle <b>Build</b> Scan</a><br>
+      Discover how to publish a build scan.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">2.&nbsp;</td>
+    <td>
+      <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fdocs.gradle.org">Gradle <b>Build</b> Scan user manual</a><br>
+      Documentation for build scans.
+    </td>
+  </tr>
+</table>
+<nav><a href="https://duckduckgo.com/about">Sobre</a></nav>
 `;
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -101,6 +126,35 @@ describe('parseDdgResults', () => {
   });
 });
 
+describe('parseLiteResults', () => {
+  it('extrai titulo e url dos resultados da versao lite', () => {
+    const resultados = parseLiteResults(LITE_RESULTADOS);
+
+    expect(resultados).toHaveLength(2);
+    expect(resultados[0]).toEqual({
+      title: 'Gradle Build Scan',
+      url: 'https://scans.gradle.com',
+      snippet: '',
+    });
+    expect(resultados[1]).toEqual({
+      title: 'Gradle Build Scan user manual',
+      url: 'https://docs.gradle.org',
+      snippet: '',
+    });
+  });
+
+  it('ignora links internos do DuckDuckGo (nav, paginacao)', () => {
+    expect(
+      parseLiteResults('<a href="https://duckduckgo.com/about">Sobre</a>'),
+    ).toEqual([]);
+  });
+
+  it('markup sem link de resultado vira lista vazia, nunca erro', () => {
+    expect(parseLiteResults('<html><body>sem resultados</body></html>')).toEqual([]);
+    expect(parseLiteResults('')).toEqual([]);
+  });
+});
+
 describe('webSearch', () => {
   it('recorre aos resultados organicos quando o verbete vem vazio', async () => {
     const fetchMock = vi.fn(async (url: unknown) => {
@@ -117,6 +171,47 @@ describe('webSearch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(texto).toContain('Gradle Setup Guide');
     expect(texto).toContain('https://gradle.org/guides/setup-gradle/');
+  });
+
+  it('tenta o endpoint HTML por POST quando o GET nao traz resultados', async () => {
+    const fetchMock = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const alvo = String(url);
+      if (alvo.includes('api.duckduckgo.com')) {
+        return jsonResponse({ AbstractText: '', Answer: '', RelatedTopics: [] });
+      }
+      if (alvo.includes('lite.duckduckgo.com')) {
+        return htmlResponse('<html><body>sem resultados</body></html>');
+      }
+      if (init?.method === 'POST') {
+        return htmlResponse(HTML_RESULTADOS);
+      }
+      return htmlResponse('<html><body>sem resultados</body></html>');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const texto = await webSearch('setup-gradle build-scan-terms-of-use-agree');
+
+    expect(fetchMock).toHaveBeenCalledTimes(3); // verbete + GET + POST
+    expect(texto).toContain('Gradle Setup Guide');
+  });
+
+  it('recorre a versao lite quando GET e POST nao trazem resultados', async () => {
+    const fetchMock = vi.fn(async (url: unknown) => {
+      const alvo = String(url);
+      if (alvo.includes('api.duckduckgo.com')) {
+        return jsonResponse({ AbstractText: '', Answer: '', RelatedTopics: [] });
+      }
+      if (alvo.includes('lite.duckduckgo.com')) {
+        return htmlResponse(LITE_RESULTADOS);
+      }
+      return htmlResponse('<html><body>sem resultados</body></html>');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const texto = await webSearch('gradle build scan');
+
+    expect(texto).toContain('Gradle Build Scan');
+    expect(texto).toContain('https://scans.gradle.com');
   });
 
   it('usa o verbete e nao consulta os resultados quando ha resposta instantanea', async () => {
