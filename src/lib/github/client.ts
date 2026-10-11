@@ -45,7 +45,11 @@ export async function githubRequest<T>(path: string, options: RequestOptions = {
   const url = path.startsWith('http') ? path : `${API}${path}`;
   const method = options.method ?? 'GET';
   const useCache = options.cache !== false && method === 'GET';
-  const cached = useCache ? etagCache.get(url) : undefined;
+  // A chave inclui o token porque contas diferentes podem ter respostas
+  // distintas para a MESMA URL (ex.: /user/repos). Cache so por URL vazaria a
+  // lista de uma conta para outra quando o usuario trocasse a conta ativa.
+  const cacheKey = `${token}\n${url}`;
+  const cached = useCache ? etagCache.get(cacheKey) : undefined;
 
   const headers: Record<string, string> = {
     Accept: options.accept ?? 'application/vnd.github+json',
@@ -90,7 +94,7 @@ export async function githubRequest<T>(path: string, options: RequestOptions = {
 
   const data = (await response.json()) as T;
   const etag = response.headers.get('etag');
-  if (useCache && etag) etagCache.set(url, { etag, data });
+  if (useCache && etag) etagCache.set(cacheKey, { etag, data });
   return data;
 }
 

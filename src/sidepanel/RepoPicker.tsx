@@ -5,6 +5,8 @@ import { Button, ErrorNote, Spinner } from './ui';
 
 interface RepoPickerProps {
   connectedIds: RepoId[];
+  /** Conta ativa no momento: quando muda, a lista e' recarregada do zero. */
+  activeGitHubAccountId: string | null;
   mappingRepoId: RepoId | null;
   mappingStep: string;
   onConnect: (repo: RepoSummary) => void;
@@ -14,6 +16,7 @@ interface RepoPickerProps {
 
 export function RepoPicker({
   connectedIds,
+  activeGitHubAccountId,
   mappingRepoId,
   mappingStep,
   onConnect,
@@ -25,14 +28,21 @@ export function RepoPicker({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    setRepos(null);
+    setError(null);
     void (async () => {
       try {
-        setRepos(await listRepositories());
+        const repos = await listRepositories();
+        if (!cancelled) setRepos(repos);
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : String(caught));
+        if (!cancelled) setError(caught instanceof Error ? caught.message : String(caught));
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeGitHubAccountId]);
 
   const filtered = useMemo(() => {
     if (!repos) return [];

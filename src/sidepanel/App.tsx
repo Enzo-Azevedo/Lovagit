@@ -28,13 +28,20 @@ export function App() {
     setActiveRepoId(state.repos[0]?.id ?? null);
   }, [activeRepoId, state.repos]);
 
-  // A conta ativa acompanha a aba: ao abrir um repositorio, a conta dona dele
-  // passa a ser a ativa nas configuracoes. Vale para a troca manual, para a
-  // selecao automatica da primeira aba e para o connect logo apos mapear.
+  // A conta ativa acompanha a aba: ao ABRIR um repositorio, a conta dona dele
+  // passa a ser a ativa nas configuracoes. Vale para a troca manual no select,
+  // para a selecao automatica da primeira aba e para o connect logo apos
+  // mapear.
+  //
+  // A dependencia e' so `activeRepoId` de proposito. Depender de `state.repos`
+  // fazia o efeito rodar em TODO refresh — inclusive quando o usuario troca a
+  // conta nas opcoes — e reverter na hora a conta recem-escolhida para a dona
+  // do repositorio aberto. Com isso, ter mais de uma conta "nao mudava nada".
   useEffect(() => {
-    const repo = activeRepoId ? state.repos.find((item) => item.id === activeRepoId) : null;
+    if (!activeRepoId) return;
+    const repo = state.repos.find((item) => item.id === activeRepoId);
     if (repo) void activateAccountForRepoOwner(repo.owner);
-  }, [activeRepoId, state.repos]);
+  }, [activeRepoId]);
 
   const activeRepo = state.repos.find((repo) => repo.id === activeRepoId) ?? null;
   const openOptions = () => chrome.runtime.openOptionsPage();
@@ -106,6 +113,7 @@ export function App() {
       {picking ? (
         <RepoPicker
           connectedIds={state.settings.connectedRepoIds}
+          activeGitHubAccountId={state.settings.activeGitHubAccountId}
           mappingRepoId={state.mappingRepoId}
           mappingStep={state.mappingStep}
           onConnect={(repo) => {
