@@ -270,6 +270,22 @@ export function acceptsReasoningParam(endpoint: string): boolean {
   }
 }
 
+/**
+ * A OpenAI passou a recusar `max_tokens` nos modelos de raciocinio (o1/o3/gpt-5)
+ * e a exigir `max_completion_tokens`. Como o `max_tokens` segue sendo o nome
+ * certo para OpenRouter, Groq, Together e endpoints compativeis, o padrao
+ * continua `max_tokens` — a troca proativa so acontece no dominio da OpenAI. O
+ * retry em `complete` cobre o resto (Azure, gateways) trocando o nome quando o
+ * provedor recusa.
+ */
+export function acceptsMaxCompletionTokens(endpoint: string): boolean {
+  try {
+    return /(^|\.)openai\.com$/i.test(new URL(endpoint).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function normalizeBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, '');
   return trimmed.endsWith('/chat/completions') ? trimmed : `${trimmed}/chat/completions`;
@@ -307,7 +323,10 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
 
       const endpoint = normalizeBaseUrl(options.baseUrl);
 
-      const enviar = async (pedirRaciocinio: boolean): Promise<Response> => {
+      const enviar = async (
+        pedirRaciocinio: boolean,
+        usarMaxCompletionTokens: boolean,
+      ): Promise<Response> => {
         try {
           return await fetch(endpoint, {
             method: 'POST',
@@ -319,7 +338,13 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
             signal: request.signal,
             body: JSON.stringify({
               model: options.model,
-              max_tokens: options.maxTokens,
+              // A API da OpenAI recusa `max_tokens` nos modelos de raciocinio;
+              // os demais provedores recusam `max_completion_tokens`. O nome
+              // certo depende do destino e, em caso de recusa, o retry abaixo
+              // reenvia com o alternativo.
+              ...(usarMaxCompletionTokens
+                ? { max_completion_tokens: options.maxTokens }
+                : { max_tokens: options.maxTokens }),
               ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
               stream: true,
               stream_options: { include_usage: true },
@@ -358,14 +383,27 @@ export function createOpenAICompatibleProvider(options: OpenAICompatibleOptions)
         }
       };
 
-      const pediuRaciocinio = acceptsReasoningParam(endpoint);
-      let response = await enviar(pediuRaciocinio);
+      let pedirRaciocinio = acceptsReasoningParam(endpoint);
+      let usarMaxCompletionTokens = acceptsMaxCompletionTokens(endpoint);
+      let response = await enviar(pedirRaciocinio, usarMaxCompletionTokens);
       let detail = response.ok ? '' : await response.text().catch(() => '');
 
       // Modelo que nao aceita o parametro de raciocinio: refaz a chamada sem
       // ele. Um extra nosso nunca pode ser o motivo de a conversa nao sair.
-      if (pediuRaciocinio && response.status === 400 && /reasoning/i.test(detail)) {
-        response = await enviar(false);
+      if (pedirRaciocinio && response.status === 400 && /reasoning/i.test(detail)) {
+        pedirRaciocinio = false;
+        response = await enviar(pedirRaciocinio, usarMaxCompletionTokens);
+        detail = response.ok ? '' : await response.text().catch(() => '');
+      }
+
+      // Modelo que recusa o NOME do parametro de limite de tokens: refaz com o
+      // alternativo. Cobre OpenAI com `max_completion_tokens`, gateways e Azure
+      // que exijam `max_tokens`, e qualquer endpoint em que a aposta inicial do
+      // host tenha errado. Um 400 aqui nao custa tokens: a recusa acontece antes
+      // de qualquer geracao.
+      if (response.status === 400 && /\bmax_(?:completion_)?tokens\b/i.test(detail)) {
+        usarMaxCompletionTokens = !usarMaxCompletionTokens;
+        response = await enviar(pedirRaciocinio, usarMaxCompletionTokens);
         detail = response.ok ? '' : await response.text().catch(() => '');
       }
 
